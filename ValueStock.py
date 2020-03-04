@@ -6,7 +6,7 @@ Created on Tue Dec  6 11:37:23 2016
 @author: hplustech
 
 Value Stock class that inherits from Stock. Contains extra information that can
-be used when performing value avering, such as what percentage of the portfolio
+be used when performing value averaging, such as what percentage of the portfolio
 it should be.
 
 """

@@ -9,6 +9,7 @@ Stock class that contains the information
 - Number owned
 - Total cost
 - Stock Code
+- Currency
 And has a buy method that is used to buy that stock
 
 Modified 29/11/2016:
@@ -106,8 +107,10 @@ class Stock:
       dividend = self.getDividend()
       if dividend != None:
           self.totalDividend = dividend
+      currency = self.getCurrency()
+      if currency != None:
+          self.currency = currency
     
-      
     # Class string method
     def __str__(self):
          return "{} - number owned: {}, total cost: ${:.2f}, total dividend: ${:.2f}." \
