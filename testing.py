@@ -15,3 +15,7 @@ db = Database(databasePath)
 sqlQuery = "SELECT * FROM DIM_STOCKS LIMIT 10"
 
 DIM_STOCKS = db.readDatabase(sqlQuery)
+
+import stockDownloader as downloader
+stockCode = "USD"
+downloader.updateStockData(stockCode, db)

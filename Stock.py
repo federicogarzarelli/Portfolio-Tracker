@@ -100,7 +100,7 @@ class Stock:
           downloader.updateStockData(self.stockCode, self.database)
       except urllib.request.URLError:
           print("{} data not updated. URL Error.".format(self.stockCode))
-              
+      
       # Updates the numberOwned, totalCost and totalDividend values
       numOwned = self.getOwned()
       if numOwned != None:
@@ -204,21 +204,40 @@ class Stock:
     
     # Get the number of the stock owned at date. Default date is today.
     def getOwned(self, date = DEFAULT_DATE):
+        SC.TOTAL_OWNED = self.getBought(date) - self.getSold(date)
+        return SC.TOTAL_OWNED
+        
+    # Get the number of the stock sold at date. Default date is today.
+    def getSold(self, date = DEFAULT_DATE):
         sqlQuery = '''SELECT SUM({}) AS {} FROM {} 
             WHERE {} LIKE '{}' 
             AND {} <= date("{}")''' \
-            .format(SC.NUMBER_PURCHASED, SC.TOTAL_OWNED, SC.TABLE_NAME, 
-                    SC.CODE, self.stockCode, 
+            .format(SC.QUANTITY_SOLD, SC.TOTAL_SOLD, SC.TRANSACTIONS_TABLE_NAME, 
+                    SC.INSTRUMENT_SOLD, self.stockCode, 
                     SC.DATE, date)
         data = self.database.readDatabase(sqlQuery)
         # If data is empty return 0
         if data.empty:
             print('No data for dates up to {}.'.format(date))
             return 0
-        return data.get_value(0, SC.TOTAL_OWNED)
-        
-    
-    # Get the number of the stock owned at date. Default date is today.
+        return data.get_value(0, SC.TOTAL_SOLD)
+
+   # Get the number of the bought sold at date. Default date is today.
+    def getBought(self, date = DEFAULT_DATE):
+        sqlQuery = '''SELECT SUM({}) AS {} FROM {} 
+            WHERE {} LIKE '{}' 
+            AND {} <= date("{}")''' \
+            .format(SC.QUANTITY_BOUGHT, SC.TOTAL_BOUGHT, SC.TRANSACTIONS_TABLE_NAME, 
+                    SC.INSTRUMENT_BOUGHT, self.stockCode, 
+                    SC.DATE, date)
+        data = self.database.readDatabase(sqlQuery)
+        # If data is empty return 0
+        if data.empty:
+            print('No data for dates up to {}.'.format(date))
+            return 0
+        return data.get_value(0, SC.TOTAL_BOUGHT)
+               
+    # Join FACT_TRANSACTIONS with FACT_HISTPRICES to calculate the expenses
     def getSpent(self, date = DEFAULT_DATE):
         sqlQuery = '''SELECT SUM({}) AS {} FROM {} 
             WHERE {} LIKE '{}' 
@@ -233,6 +252,21 @@ class Stock:
             return 0
         return data.get_value(0, SC.TOTAL_SPENT)
     
+
+    # Get the number of the stock owned at date. Default date is today.
+    def getSpent(self, date = DEFAULT_DATE):
+        sqlQuery = '''SELECT SUM({}) AS {} FROM {} 
+            WHERE {} LIKE '{}' 
+            AND {} <= date("{}")''' \
+            .format(SC.COST, SC.TOTAL_SPENT, SC.TABLE_NAME, 
+                    SC.CODE, self.stockCode, 
+                    SC.DATE, date)
+        data = self.database.readDatabase(sqlQuery)
+        # If data is empty return 0
+        if data.empty:
+            print('No data for dates up to {}.'.format(date))
+            return 0
+        return data.get_value(0, SC.TOTAL_SPENT)
     
     # Get the price of the stock at date. Default date is today.
     def getPrice(self, date = DEFAULT_DATE):
@@ -268,7 +302,18 @@ class Stock:
             print(('No dividend data for {}.'.format(date)))
             return 0
         return data.get_value(0, SC.DIVIDEND_TOTAL)
-        
+
+    # Get the currency (YAHOO_CURRENCY) of the stock.
+    def getCurrency(self):
+        sqlQuery = ''' SELECT {} FROM {} WHERE {} = '{}' ''' \
+            .format(SC.YAHOO_CURRENCY, SC.STOCKS_TABLE_NAME,
+                    SC.IB_TICKER, self.stockCode)
+        data = self.database.readDatabase(sqlQuery)
+        # If data is empty return 0
+        if data.empty:
+            print(('No currency for {}.'.format(IB_TICKER)))
+            return 0
+        return data.get_value(0, SC.YAHOO_CURRENCY)        
         
     # Get a data fram containing the price of the stock over a range of dates    
     def getPriceRange(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
