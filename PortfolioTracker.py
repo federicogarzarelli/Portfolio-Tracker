@@ -6,7 +6,7 @@ Created on Fri Nov 25 11:23:16 2016
 @author: dmcauslan
 
 Modified 28/11/2016:
-    * Added database funciton in Database class
+    * Added database function in Database class
     * Changed portfolio to be a class that holds all the stocks.
 Modified 29/11/2016:
     * Removed purchase function, stock class now takes in the database when

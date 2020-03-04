@@ -50,7 +50,11 @@ Modified 02/12/2016:
 Modified 05/12/2016:
     * Added getDividendRange() method.
     * Updated plot() method to include plotting dividends.
-        
+
+@author: fega
+
+Modified 04/03/2020:
+    * Added currency attribute
     
 """
 import datetime
