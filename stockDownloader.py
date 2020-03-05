@@ -16,6 +16,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 
 import yfinance as yf # https://aroussi.com/post/python-yahoo-finance
+# pip install yfinance --upgrade --no-cache-dir
     
 #takes a date input as a list of strings in the format 'mmm d, yyyy' and converts it to
 #yyyy-mm-dd
@@ -115,9 +116,9 @@ def stockScrape(stockCode, database, minDate = '1975-01-01'):
     
     
 ## Testing code
-#testPath = 'C:/Users/fega/Google Drive/Work/Portfolio Tracker/Code Repo/MyPortfolio.db'
+#testPath = 'C:/Users/feder/Google Drive/Work/Portfolio Tracker/Code Repo/MyPortfolio.db'
 #testDB = Database(testPath) 
-##testDB.createTable(SC.HISTORICAL_TABLE_NAME, SC.HISTORICAL_COLUMN_LIST)
-#updateStockData("BTMA.AS", testDB)
+#testDB.createTable(SC.HISTORICAL_TABLE_NAME, SC.HISTORICAL_COLUMN_LIST)
+#updateStockData("CHF", testDB)
 ##stockScrape("IJR.AX", testDB, "1990-11-10")
 #print(testDB.readDatabase('''SELECT * FROM {}'''.format(SC.HISTORICAL_TABLE_NAME)))

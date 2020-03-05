@@ -237,24 +237,12 @@ class Stock:
             return 0
         return data.get_value(0, SC.TOTAL_BOUGHT)
                
-    # Join FACT_TRANSACTIONS with FACT_HISTPRICES to calculate the expenses
+    # Get the total spent as price paid + commissions
     def getSpent(self, date = DEFAULT_DATE):
-        sqlQuery = '''SELECT SUM({}) AS {} FROM {} 
-            WHERE {} LIKE '{}' 
-            AND {} <= date("{}")''' \
-            .format(SC.COST, SC.TOTAL_SPENT, SC.TABLE_NAME, 
-                    SC.CODE, self.stockCode, 
-                    SC.DATE, date)
-        data = self.database.readDatabase(sqlQuery)
-        # If data is empty return 0
-        if data.empty:
-            print('No data for dates up to {}.'.format(date))
-            return 0
-        return data.get_value(0, SC.TOTAL_SPENT)
+        return self.getPricePaid(date) * self.getCommissions(date)
     
-
-    # Get the number of the stock owned at date. Default date is today.
-    def getSpent(self, date = DEFAULT_DATE):
+    # Get the total price paid in Euros for a stock. Default date is today.
+    def getPricePaid(self, date = DEFAULT_DATE):
         sqlQuery = '''
         WITH PRICETRANSJOIN AS (
         	SELECT TRANS.TRANSACTION_ID, TRANS.INSTRUMENT_BOUGHT, datetime(TRANS.DATE) AS DATE, TRANS.INSTRUMENT_SOLD, TRANS.QUANTITY_SOLD, 
@@ -283,7 +271,35 @@ class Stock:
         if data.empty:
             print('No data for dates up to {}.'.format(date))
             return 0
-        return data.get_value(0, SC.TOTAL_SPENT)
+        return data.get_value(0, "TOT_COST_EUR")
+    
+    # Get the total commissions paid in Euros for a stock. Default date is today.
+    def getCommissions(self, date = DEFAULT_DATE):
+        sqlQuery = '''
+        WITH PRICETRANSJOIN AS (
+        	SELECT TRANS.TRANSACTION_ID, TRANS.INSTRUMENT_BOUGHT, datetime(TRANS.DATE) AS DATE, TRANS.COMMISSION, 
+        			ABS(JULIANDAY(datetime(TRANS.DATE))- JULIANDAY(datetime(PRICES.DATE))) AS DATEDIFF, PRICES.IB_TICKER, PRICES.PRICE,
+        			ROW_NUMBER() OVER(PARTITION BY TRANS.TRANSACTION_ID 
+        								 ORDER BY ABS(JULIANDAY(datetime(TRANS.DATE))- JULIANDAY(datetime(PRICES.DATE)))) AS rk
+        	FROM FACT_TRANSACTIONS AS TRANS LEFT JOIN FACT_HISTPRICES AS PRICES
+        		ON 	(datetime(TRANS.DATE) = datetime(PRICES.DATE) OR 
+        			 datetime(TRANS.DATE, '+1 day') = datetime(PRICES.DATE) OR 
+        			 datetime(TRANS.DATE, '+1 day') = datetime(PRICES.DATE))
+        	WHERE PRICES.IB_TICKER = 'CHF' AND TRANS.INSTRUMENT_BOUGHT = '{}'
+        	ORDER BY TRANS.TRANSACTION_ID, DATEDIFF
+        	), COMMISSIONS as ( 
+        	SELECT PRICETRANSJOIN.DATE, PRICETRANSJOIN.PRICE * PRICETRANSJOIN.COMMISSION AS COMMISSION_EUR 
+        	FROM PRICETRANSJOIN WHERE PRICETRANSJOIN.rk = 1 AND PRICETRANSJOIN.DATE <= '{}'
+        	)
+        SELECT SUM(COMMISSIONS.COMMISSION_EUR) AS TOT_COMMISSIONS_EUR FROM COMMISSIONS;     
+        ''' \
+            .format(self.stockCode, date)
+        data = self.database.readDatabase(sqlQuery)
+        # If data is empty return 0
+        if data.empty:
+            print('No data for dates up to {}.'.format(date))
+            return 0
+        return data.get_value(0, "TOT_COMMISSIONS_EUR")
     
     # Get the price of the stock at date. Default date is today.
     def getPrice(self, date = DEFAULT_DATE):
@@ -299,12 +315,10 @@ class Stock:
             raise ValueError(('No price data for {}.'.format(date)))
         return data.get_value(0, SC.HISTORICAL_PRICE)
 
-        
     # get the total value of the stock at date. Default date is today.
     def getValue(self, date = DEFAULT_DATE):
         return self.getOwned(date) * self.getPrice(date)
         
-    
     # Get the total amount of dividend payments at date.
     def getDividend(self, date = DEFAULT_DATE):
         sqlQuery = ''' SELECT SUM({}) AS {} FROM {}
