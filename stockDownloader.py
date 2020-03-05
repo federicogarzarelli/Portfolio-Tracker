@@ -13,17 +13,9 @@ Modified 04/03/2020:
 
 import stockContract as SC
 import pandas as pd
-import datetime
+from datetime import datetime, timedelta
 
-import yfinance as yf
-# https://aroussi.com/post/python-yahoo-finance
-
-   
-# cleans dataframe data        
-def dataClean(inptFrame):
-    inptFrame[SC.DATE] = convertDate(inptFrame[SC.DATE].tolist())   
-    return inptFrame
-    
+import yfinance as yf # https://aroussi.com/post/python-yahoo-finance
     
 #takes a date input as a list of strings in the format 'mmm d, yyyy' and converts it to
 #yyyy-mm-dd
@@ -40,17 +32,17 @@ def convertDate(dateString):
     return dateString
 
 
-# Takes in a date in the format "yyyy-mm-dd" and increments it by one day. Or if the 
+# Takes in a date in the format "yyyy-mm-dd hh:mm:ss" and increments it by one day. Or if the 
 # day is a Friday, increment by 3 days, so the next day of data we get is the next
 # Monday.
 def incrementDate(dateString):
-    [year, month, day] = dateString.split("-")
-    dateTime = datetime.date(int(year), int(month), int(day))
+   
+    dateTime = datetime.strptime(dateString, '%Y-%m-%d %H:%M:%S').date()
     # If the day of the week is a friday increment by 3 days.
     if dateTime.isoweekday() == 5:
-        datePlus = dateTime + datetime.timedelta(3)
+        datePlus = dateTime + timedelta(3)
     else:
-        datePlus = dateTime + datetime.timedelta(1)
+        datePlus = dateTime + timedelta(1)
     return str(datePlus)
     
     
@@ -68,9 +60,7 @@ def updateStockData(stockCode, database):
     # if not then run initialStockScrape to get all past data
     if stockData.empty:
         print('Running stockScrape() on {}. --First run.'.format(stockCode))
-        #self.URL = 'http://finance.yahoo.com/q/hp?s='+self.stockName+'&d=02&e=25&f=2016&g=d&a=00&b=01&c=2015&z=66&y=' #Test URL
-        YahooCode = getYahooCode(stockCode, database)
-        stockScrape(YahooCode, database)
+        stockScrape(stockCode, database)
     else:
         #access database to get latestDate
         print('Running stockScrape() on {}. --Updating data.'.format(stockCode))
@@ -84,8 +74,7 @@ def updateStockData(stockCode, database):
         minDate = incrementDate(minDate)
         
         # Updates stock data
-        YahooCode = getYahooCode(stockCode, database)
-        stockScrape(YahooCode, database, minDate)                     
+        stockScrape(stockCode, database, minDate)                     
     
 def getYahooCode(stockCode, database):
         sqlQuery = ''' SELECT {} FROM {} WHERE {} = '{}' ''' \
@@ -100,69 +89,35 @@ def getYahooCode(stockCode, database):
     
 # function which does the first time initialization of the stock and 
 #downloads all past stock data, returns array of dates, and array of data
-def stockScrape(stockCode, database, minDate = '1900-01-01'):
+def stockScrape(stockCode, database, minDate = '1975-01-01'):
     # Initialize pandas dataframe to hold stock data    
     stockDataFrame =  pd.DataFrame({SC.DATE: [], SC.IB_TICKER: [], SC.PRICE: []});
  
-    stock = yf.Ticker(stockCode)
+    YahooCode = getYahooCode(stockCode, database)
+    stock = yf.Ticker(YahooCode)
 
     dowloaded_data = stock.history(interval="1d", start = minDate)
-    rowTemp = list(zip(list(dowloaded_data.index), [stockCode] * len(dowloaded_data['Close']), dowloaded_data['Close']))
-    stockDataFrame = stockDataFrame.append(pd.DataFrame([rowTemp], columns = SC.HISTORICAL_COLUMNS), ignore_index=True)
 
-    stockDataFrame = stockDataFrame.append(pd.DataFrame([list(dowloaded_data.index), [stockCode] * len(dowloaded_data['Close']), dowloaded_data['Close']], columns = SC.HISTORICAL_COLUMNS), ignore_index=True)
-
-    # Base URL to download data
-    endYear, endMonth, endDay = convertToURLDate(str(datetime.date.today()))
-    startYear, startMonth, startDay = convertToURLDate(minDate)
+    # Manipulate the output
+    Dates = dowloaded_data.index.to_frame()
+    Dates = Dates.reset_index(drop=True)
     
-    baseURL = "https://au.finance.yahoo.com/q/hp?s={}&a={}&b={}&c={}&d={}&e={}&f={}&g=d&z=66&y=" \
-    .format(stockCode, startMonth, startDay, startYear, endMonth, endDay, endYear)
-#    print(baseURL)
-    
-    # Putting into a loop to download all pages of data
-    done = False
-    pageIndex = 0
-    
-    # This loops over the different pages of data. Each page stores at most 66
-    # rows in the table.
-    while not done:
-        print(pageIndex)
-        URLPage = baseURL + str(pageIndex)        
-        #creates soup and dowloads data
-        soup = BeautifulSoup(urlopen(URLPage).read(),"lxml")
-        table = soup.find('table','yfnc_datamodoutline1')
+    Price = dowloaded_data['Close'].reset_index(drop=True)
         
-        #breaks loop if it doesnt find a table
-        if table == None:
-            done = True
-            break                
-
-        # Loop over rows in table, adding date and price data to stockDataFrame
-        for row in table.tr.td.find_all("tr"):
-            columns = row.find_all("td")
-            # This checks if its a data column
-            if len(columns) == 7:
-                rowDate = columns[0].string
-                rowPrice = columns[4].string
-                rowTemp = [stockCode, rowDate, rowPrice]
-                stockDataFrame = stockDataFrame.append(pd.DataFrame([rowTemp], columns = SC.HISTORICAL_COLUMNS), ignore_index=True)
-        
-        #increment pageIndex
-        pageIndex += 66
+    Ticker = pd.DataFrame([stockCode] * len(dowloaded_data['Close']),columns=['Ticker'])
+    
+    stockDataFrame =  pd.concat([Dates, Ticker, Price], axis = 1)
+    stockDataFrame.columns = SC.HISTORICAL_COLUMNS
+    stockDataFrame.ignore_index=True
            
-    # Cleans the numerical data before saving
-    dataClean(stockDataFrame)
-    
     # Add to SQL database
     database.addToDatabase(stockDataFrame, SC.HISTORICAL_TABLE_NAME)
     
     
-    
 ## Testing code
-#testPath = '/Users/hplustech/Documents/Canopy/Portfolio Tracker/Databases/test.db'
-#testDB = Database(testPath)
+#testPath = 'C:/Users/fega/Google Drive/Work/Portfolio Tracker/Code Repo/MyPortfolio.db'
+#testDB = Database(testPath) 
 ##testDB.createTable(SC.HISTORICAL_TABLE_NAME, SC.HISTORICAL_COLUMN_LIST)
-updateStockData("USD", db)
+#updateStockData("BTMA.AS", testDB)
 ##stockScrape("IJR.AX", testDB, "1990-11-10")
-print(db.readDatabase('''SELECT * FROM {}'''.format(SC.HISTORICAL_TABLE_NAME)))
+#print(testDB.readDatabase('''SELECT * FROM {}'''.format(SC.HISTORICAL_TABLE_NAME)))

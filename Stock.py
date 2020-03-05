@@ -69,7 +69,7 @@ import urllib.request
 ## Constants ##
 ###############
 DEFAULT_DATE = str(datetime.date.today())
-DEFAULT_STARTDATE = "1900-01-01"
+DEFAULT_STARTDATE = "1975-01-01"
 
 ####################
 ## Helper Methods ##
@@ -255,12 +255,29 @@ class Stock:
 
     # Get the number of the stock owned at date. Default date is today.
     def getSpent(self, date = DEFAULT_DATE):
-        sqlQuery = '''SELECT SUM({}) AS {} FROM {} 
-            WHERE {} LIKE '{}' 
-            AND {} <= date("{}")''' \
-            .format(SC.COST, SC.TOTAL_SPENT, SC.TABLE_NAME, 
-                    SC.CODE, self.stockCode, 
-                    SC.DATE, date)
+        sqlQuery = '''
+        WITH PRICETRANSJOIN AS (
+        	SELECT TRANS.TRANSACTION_ID, TRANS.INSTRUMENT_BOUGHT, datetime(TRANS.DATE) AS DATE, TRANS.INSTRUMENT_SOLD, TRANS.QUANTITY_SOLD, 
+        			ABS(JULIANDAY(datetime(TRANS.DATE))- JULIANDAY(datetime(PRICES.DATE))) AS DATEDIFF, PRICES.IB_TICKER, PRICES.PRICE,
+        			ROW_NUMBER() OVER(PARTITION BY TRANS.TRANSACTION_ID 
+        								 ORDER BY ABS(JULIANDAY(datetime(TRANS.DATE))- JULIANDAY(datetime(PRICES.DATE)))) AS rk
+        	FROM FACT_TRANSACTIONS AS TRANS LEFT JOIN FACT_HISTPRICES AS PRICES
+        		ON TRANS.INSTRUMENT_SOLD = PRICES.IB_TICKER AND 
+        			(datetime(TRANS.DATE) = datetime(PRICES.DATE) OR 
+        			 datetime(TRANS.DATE, '+1 day') = datetime(PRICES.DATE) OR 
+        			 datetime(TRANS.DATE, '+1 day') = datetime(PRICES.DATE))
+        	WHERE TRANS.INSTRUMENT_BOUGHT = '{}'
+        	ORDER BY TRANS.TRANSACTION_ID, DATEDIFF
+        	), COSTS as ( 
+        	SELECT PRICETRANSJOIN.DATE,
+        		   CASE WHEN PRICETRANSJOIN.INSTRUMENT_SOLD = "EUR" THEN QUANTITY_SOLD 
+        				ELSE (PRICETRANSJOIN.QUANTITY_SOLD*PRICETRANSJOIN.PRICE) 
+        			END AS COST 
+        	FROM PRICETRANSJOIN WHERE PRICETRANSJOIN.rk = 1 AND PRICETRANSJOIN.DATE <= '{}'
+        	)
+        SELECT SUM(COSTS.COST) AS TOT_COST_EUR FROM COSTS; 
+        ''' \
+            .format(self.stockCode, date)
         data = self.database.readDatabase(sqlQuery)
         # If data is empty return 0
         if data.empty:
