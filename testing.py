@@ -7,15 +7,16 @@ Created on Wed Mar  4 20:34:14 2020
 
 import pandas as pd
 from Database import Database
+import stockContract as SC
+import Stock as ST
+import stockDownloader as downloader
+
 
 databasePath = "MyPortfolio.db"
 
-db = Database(databasePath)
+database = Database(databasePath)
 
-sqlQuery = "SELECT * FROM DIM_STOCKS LIMIT 10"
+stockCode = "SGLD"
 
-DIM_STOCKS = db.readDatabase(sqlQuery)
-
-import stockDownloader as downloader
-stockCode = "USD"
-downloader.updateStockData(stockCode, db)
+SGLD = ST.Stock(stockCode, database)
+SGLD.plot()

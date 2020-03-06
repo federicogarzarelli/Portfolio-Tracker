@@ -32,6 +32,9 @@ def convertDate(dateString):
         dateString[n] = datetime.date(int(splitDate[2]),int(monthDict[splitDate[1]]),int(splitDate[0])).isoformat() #y,m,d
     return dateString
 
+def strtoDate(dateString):
+    thisdate =  datetime.strptime(dateString, '%Y-%m-%d').date()
+    return thisdate
 
 # Takes in a date in the format "yyyy-mm-dd hh:mm:ss" and increments it by one day. Or if the 
 # day is a Friday, increment by 3 days, so the next day of data we get is the next
@@ -74,8 +77,12 @@ def updateStockData(stockCode, database):
         # Increment date by 1 day
         minDate = incrementDate(minDate)
         
-        # Updates stock data
-        stockScrape(stockCode, database, minDate)                     
+        if strtoDate(minDate) < datetime.today().date():
+            # Updates stock data
+            stockScrape(stockCode, database, minDate)
+        else:
+            # Data are already up to date
+            print("Data for {} are already up to date".format(stockCode))            
     
 def getYahooCode(stockCode, database):
         sqlQuery = ''' SELECT {} FROM {} WHERE {} = '{}' ''' \
@@ -86,7 +93,7 @@ def getYahooCode(stockCode, database):
         if data.empty:
             print(('No Yahoo Symbol for {}.'.format(stockCode)))
             return 0
-        return data.get_value(0, SC.YAHOO_SYMBOL)   
+        return data.at[0, SC.YAHOO_SYMBOL]
     
 # function which does the first time initialization of the stock and 
 #downloads all past stock data, returns array of dates, and array of data
