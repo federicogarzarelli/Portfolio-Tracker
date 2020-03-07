@@ -75,15 +75,6 @@ import urllib.request
 DEFAULT_DATE = str(datetime.date.today())
 DEFAULT_STARTDATE = "1975-01-01"
 
-####################
-## Helper Methods ##
-####################
-# Converts a date in "yyyy-mm-dd" format to a dateTime object
-def convertDate(date):
-    [year, month, day] = map(int, date.split("-"))
-    return datetime.date(year, month, day)
-
-
 # Class for holding the information of an individual stock.
 # Parameters:   numberOwned
 #               totalCost
@@ -124,17 +115,18 @@ class Stock:
          return "{} - number owned: {}, total cost: ${:.2f}, total dividend: ${:.2f}." \
                 .format(self.stockCode, self.numberOwned, self.totalCost, self.totalDividend)
 
-################### to update ##############################    
-#   # Buy a number of stocks at a price and save in the database     
-#    def buy(self, numberBought, price, date = DEFAULT_DATE):
-#        self.numberOwned += numberBought
-#        self.totalCost += numberBought*price
-#        purchaseData = pd.DataFrame({SC.CODE: [self.stockCode],
-#                                     SC.DATE: [date],
-#                                     SC.NUMBER_PURCHASED: [numberBought],
-#                                     SC.PRICE: [price],
-#                                     SC.COST: [price*numberBought]})
-#        self.database.addToDatabase(purchaseData, SC.TABLE_NAME)
+
+
+    def buy(self, numberBought, instrument_sold, quantity_sold, commission, date = DEFAULT_DATE):
+        self.numberOwned += numberBought
+        self.totalCost += numberBought*price
+        purchaseData = pd.DataFrame({SC.CODE: [self.stockCode],
+                                     SC.DATE: [date],
+                                     SC.NUMBER_PURCHASED: [numberBought],
+                                     SC.INSTRUMENT_SOLD: [instrument_sold],
+                                     SC.QUANTITY_SOLD: quantity_sold,
+                                     SC.COMMISSION: [commission]})
+        self.database.addToDatabase(purchaseData, SC.TABLE_NAME)
 #    
 #################### to update ##############################        
 #    # Sell a number of stocks at a price and save in the database     
@@ -152,7 +144,7 @@ class Stock:
 #        self.database.addToDatabase(purchaseData, SC.TABLE_NAME)
 #    
 # ################### to update ##############################        
-#    # Update a data input, incase of input error. 
+#    # Update a data input, in case of input error. 
 #    # numberBought is a negative number if its a sale we wish to reverse
 #    def remove(self, numberBought, price, date):
 #        self.numberOwned -= numberBought
@@ -176,8 +168,6 @@ class Stock:
 #            self.totalCost += numberBought*price
 #            raise ValueError("Purchase of {} shares for ${} on {} was not in database".format(numberBought, price, date))
 
-     
-        
     
     # Adds a dividend payment to the dividend database table
     def addDividend(self, payment, date = DEFAULT_DATE):
@@ -187,7 +177,6 @@ class Stock:
                                      SC.DIVIDEND_AMOUNT: [payment]})
         self.database.addToDatabase(dividendData, SC.DIVIDEND_TABLE_NAME)        
     
-        
     # Removes a divident payment from the dividend database table
     def removeDividend(self, payment, date):
         self.totalDividend -= payment
@@ -206,7 +195,6 @@ class Stock:
         if rowsRemoved == 0:
             self.totalDividend += payment
             raise ValueError("Dividend payment of ${} was not in database".format(payment, date))
-    
     
     # Get the number of the stock owned at date. Default date is today.
     def getOwned(self, date = DEFAULT_DATE):
@@ -308,6 +296,27 @@ class Stock:
             return 0
         return data.at[0, "TOT_COMMISSIONS_EUR"]
     
+    def getCommissions2(self, date = DEFAULT_DATE):
+        sqlQuery = '''
+           	SELECT TRANSACTION_ID, datetime(DATE) AS DATE, COMMISSION
+        	FROM FACT_TRANSACTIONS 
+        	WHERE INSTRUMENT_BOUGHT = '{}' and datetime(DATE) <= '{}'
+        	ORDER BY TRANSACTION_ID;     
+        ''' \
+            .format(self.stockCode, date)
+        commissionsCHF = self.database.readDatabase(sqlQuery) 
+        CHFEUR = self.getCHFEURRange(startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE)
+        commissionsCHF_L_CHFEUF = pd.merge(commissionsCHF, CHFEUR, on='DATE', how='left')
+
+        
+        
+        
+        # If data is empty return 0
+        if data.empty or data.at[0, "TOT_COMMISSIONS_EUR"] is None:
+            print('No data for dates up to {}. Method: Stock.getCommissions.'.format(date))
+            return 0
+        return data.at[0, "TOT_COMMISSIONS_EUR"]
+
     # Get the price of the stock at date. Default date is today.
     def getPrice(self, date = DEFAULT_DATE):
         sqlQuery = ''' SELECT {} FROM {}
@@ -354,21 +363,40 @@ class Stock:
         return data.at[0, SC.YAHOO_CURRENCY]      
        
 #################### to update ##############################
-#    # Get a data fram containing the price of the stock over a range of dates    
-#    def getPriceRange(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
-#        sqlQuery = ''' SELECT {}, {} FROM {}
-#            WHERE {} LIKE '{}'
-#            AND {} BETWEEN date("{}") AND date("{}") 
-#            ORDER BY {} ASC''' \
-#            .format(SC.DATE, SC.PRICE, SC.HISTORICAL_TABLE_NAME, 
-#                    SC.IB_TICKER, self.stockCode, 
-#                    SC.DATE, startDate, endDate,
-#                    SC.DATE)
-#        data = self.database.readDatabase(sqlQuery)
-#        # If data is empty raise ValueError
-#        if data.empty:
-#            raise ValueError(('No price data in the range {} - {}. Method: Stock.getPriceRange'.format(startDate, endDate)))
-#        return data
+    # Get a data frame containing the price of the stock over a range of dates    
+    def getPriceRange(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
+        sqlQuery = ''' SELECT {}, {} FROM {}
+            WHERE {} LIKE '{}'
+            AND {} BETWEEN date("{}") AND date("{}") 
+            ORDER BY {} ASC''' \
+            .format(SC.DATE, SC.PRICE, SC.HISTORICAL_TABLE_NAME, 
+                    SC.IB_TICKER, self.stockCode, 
+                    SC.DATE, startDate, endDate,
+                    SC.DATE)
+        data = self.database.readDatabase(sqlQuery)
+        # If data is empty raise ValueError
+        if data.empty:
+            raise ValueError(('No price data in the range {} - {}. Method: Stock.getPriceRange'.format(startDate, endDate)))
+        return data
+    
+        # Get a data frame containing the price of the stock over a range of dates    
+    def getCHFEURRange(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
+        sqlQuery = ''' SELECT {}, {} FROM {}
+            WHERE {} LIKE '{}'
+            AND {} BETWEEN date("{}") AND date("{}") 
+            ORDER BY {} ASC''' \
+            .format(SC.DATE, SC.PRICE, SC.HISTORICAL_TABLE_NAME, 
+                    SC.IB_TICKER, "CHF", 
+                    SC.DATE, startDate, endDate,
+                    SC.DATE)
+        data = self.database.readDatabase(sqlQuery)
+        # If data is empty raise ValueError
+        if data.empty:
+            raise ValueError(('No price data in the range {} - {}. Method: Stock.getCHFEUR'.format(startDate, endDate)))
+        return data
+    
+    
+    
 #        
 #    
 #    # Gets a dataframe containing the number of shares owned over a range of dates    

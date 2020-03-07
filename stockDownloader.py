@@ -14,40 +14,11 @@ Modified 04/03/2020:
 import stockContract as SC
 import pandas as pd
 from datetime import datetime, timedelta
+import utils
 
 import yfinance as yf # https://aroussi.com/post/python-yahoo-finance
 # pip install yfinance --upgrade --no-cache-dir
     
-#takes a date input as a list of strings in the format 'mmm d, yyyy' and converts it to
-#yyyy-mm-dd
-def convertDate(dateString):
-    # a dictionary to convert months to a number
-    monthDict = {'Jan': '01', 'Feb':'02', 'Mar':'03','Apr':'04','May':'05','Jun':'06',
-    'Jul':'07','Aug':'08','Sep':'09','Oct':'10','Nov':'11','Dec':'12'}
-    
-    for n in range(len(dateString)):
-        #splits the string
-        splitDate = re.split('\W+',dateString[n])
-        # cconverts the date into date object
-        dateString[n] = datetime.date(int(splitDate[2]),int(monthDict[splitDate[1]]),int(splitDate[0])).isoformat() #y,m,d
-    return dateString
-
-def strtoDate(dateString):
-    thisdate =  datetime.strptime(dateString, '%Y-%m-%d').date()
-    return thisdate
-
-# Takes in a date in the format "yyyy-mm-dd hh:mm:ss" and increments it by one day. Or if the 
-# day is a Friday, increment by 3 days, so the next day of data we get is the next
-# Monday.
-def incrementDate(dateString):
-   
-    dateTime = datetime.strptime(dateString, '%Y-%m-%d %H:%M:%S').date()
-    # If the day of the week is a friday increment by 3 days.
-    if dateTime.isoweekday() == 5:
-        datePlus = dateTime + timedelta(3)
-    else:
-        datePlus = dateTime + timedelta(1)
-    return str(datePlus)
     
     
 # Checks whether stock is in database, if not it stockScrape to get all the data.
@@ -75,14 +46,14 @@ def updateStockData(stockCode, database):
         y = database.readDatabase(sqlQuery)  
         minDate = y.Date[0]    # minDate is the earliest data of data that the program needs to download
         # Increment date by 1 day
-        minDate = incrementDate(minDate)
+        minDate = utils.incrementDate(minDate)
         
-        if strtoDate(minDate) < datetime.today().date():
+        if utils.convertDate(minDate) < datetime.today().date():
             # Updates stock data
             stockScrape(stockCode, database, minDate)
         else:
             # Data are already up to date
-            print("Data for {} are already up to date".format(stockCode))            
+            print("Data for {} are already up to date. Module: updateStockData.".format(stockCode))            
     
 def getYahooCode(stockCode, database):
         sqlQuery = ''' SELECT {} FROM {} WHERE {} = '{}' ''' \
@@ -91,7 +62,7 @@ def getYahooCode(stockCode, database):
         data = database.readDatabase(sqlQuery)
         # If data is empty return 0
         if data.empty:
-            print(('No Yahoo Symbol for {}.'.format(stockCode)))
+            print(('No Yahoo Symbol for {}. Module: getYahooCode.'.format(stockCode)))
             return 0
         return data.at[0, SC.YAHOO_SYMBOL]
     

@@ -67,22 +67,7 @@ DEFAULT_DATE = str(datetime.date.today())
 DEFAULT_STARTDATE = "1900-01-01"
 DEFAULT_STOCKCODE = "All"
 
-####################
-## Helper Methods ##
-####################
-# Takes in a date in the format "yyyy-mm-dd" and decrements it by one day. 
-def decrementDate(dateString):
-    [year, month, day] = dateString.split("-")
-    dateTime = datetime.date(int(year), int(month), int(day))
-    dateMinus = dateTime - datetime.timedelta(1)
-    return str(dateMinus)
-    
-# Converts a date in "yyyy-mm-dd" format to a dateTime object
-def convertDate(date):
-    [year, month, day] = map(int, date.split("-"))
-    return datetime.date(year, month, day)
-    
-    
+   
 # Portfolio class for holding all of the stock objects that the user holds in
 # their investment portfolio.
 # See stockContract.py for the database contract
@@ -93,10 +78,12 @@ class Portfolio:
         self.databasePath = "/Users/hplustech/Documents/Canopy/Portfolio Tracker/Databases/" + databaseName + ".db"
         # Create SQL database
         self.stockDatabase = Database(self.databasePath);
-        # Create tables
-        self.stockDatabase.createTable(SC.TABLE_NAME, SC.COLUMN_LIST)
-        self.stockDatabase.createTable(SC.HISTORICAL_TABLE_NAME, SC.HISTORICAL_COLUMN_LIST)
-        self.stockDatabase.createTable(SC.DIVIDEND_TABLE_NAME, SC.DIVIDEND_COLUMN_LIST)
+
+# remove, not needed
+#        # Create tables
+#        self.stockDatabase.createTable(SC.TABLE_NAME, SC.COLUMN_LIST)
+#        self.stockDatabase.createTable(SC.HISTORICAL_TABLE_NAME, SC.HISTORICAL_COLUMN_LIST)
+#        self.stockDatabase.createTable(SC.DIVIDEND_TABLE_NAME, SC.DIVIDEND_COLUMN_LIST)
 
         
     # Class string method
