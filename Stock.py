@@ -306,7 +306,7 @@ class Stock:
             .format(self.stockCode, date)
         commissionsCHF = self.database.readDatabase(sqlQuery) 
         CHFEUR = self.getCHFEURRange(startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE)
-        commissionsCHF_L_CHFEUF = pd.merge(commissionsCHF, CHFEUR, on='DATE', how='left')
+        commissionsCHF_L_CHFEUF = pd.merge_asof(commissionsCHF, CHFEUR, on='DATE')
 
         
         

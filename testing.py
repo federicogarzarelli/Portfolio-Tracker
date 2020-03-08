@@ -19,11 +19,11 @@ database = Database(databasePath)
 
 stockCode = "EUR"
 
-EUR = ST.Stock(stockCode, database)
+SGLD = ST.Stock(stockCode, database)
 #SGLD.plot()
 
 
 DEFAULT_DATE = str(datetime.date.today())
 DEFAULT_STARTDATE = "1975-01-01"
-SGLD.getCHFEUR(startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE)
+EUR.getCHFEURRange(startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE)
 
