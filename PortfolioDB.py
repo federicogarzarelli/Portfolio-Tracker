@@ -13,7 +13,7 @@ from datetime import datetime, timedelta, date
 import utils
 import yfinance as yf # https://aroussi.com/post/python-yahoo-finance
 # pip install yfinance --upgrade --no-cache-dir
-    
+import Database
 
 ###############
 ## Constants ##
@@ -56,7 +56,7 @@ class PortfolioDB(Database):
         	FROM DIM_STOCKS 
         	WHERE IB_TICKER in ({});     
         ''' \
-            .format(tickers_str, startDate, endDate)
+            .format(tickers_str)
         data = self.readDatabase(sqlQuery) 
         return data
     

@@ -10,6 +10,7 @@ from Database import Database
 import Stock as ST
 import utils 
 import datetime
+import PortfolioDB
 
 databasePath = "MyPortfolio.db"
 
