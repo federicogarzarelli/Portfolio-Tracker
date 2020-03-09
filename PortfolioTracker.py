@@ -63,29 +63,19 @@ import pandas as pd
 ###############
 ## Constants ##
 ###############
-DEFAULT_DATE = str(datetime.date.today())
-DEFAULT_STARTDATE = "1900-01-01"
-DEFAULT_STOCKCODE = "All"
 
    
 # Portfolio class for holding all of the stock objects that the user holds in
 # their investment portfolio.
-# See stockContract.py for the database contract
+
 class Portfolio: 
     # Class initializer
     def __init__(self, databaseName):
-        self.stockList = []
-        self.databasePath = "/Users/hplustech/Documents/Canopy/Portfolio Tracker/Databases/" + databaseName + ".db"
+        self.databasePath = "" + databaseName + ".db"
         # Create SQL database
-        self.stockDatabase = Database(self.databasePath);
+        self.stockDatabase = PortfolioDB(self.databasePath);
+        self.stockList = self.getStockList()
 
-# remove, not needed
-#        # Create tables
-#        self.stockDatabase.createTable(SC.TABLE_NAME, SC.COLUMN_LIST)
-#        self.stockDatabase.createTable(SC.HISTORICAL_TABLE_NAME, SC.HISTORICAL_COLUMN_LIST)
-#        self.stockDatabase.createTable(SC.DIVIDEND_TABLE_NAME, SC.DIVIDEND_COLUMN_LIST)
-
-        
     # Class string method
     def __str__(self):
         returnString = ""
@@ -96,14 +86,20 @@ class Portfolio:
         .format(self.getCost(DEFAULT_DATE), self.getValue(DEFAULT_DATE), self.getDividends(DEFAULT_DATE), self.getValue(DEFAULT_DATE) + self.getDividends(DEFAULT_DATE))
         return returnString
 
-    
+    def getStockList(self):
+        sqlQuery = '''
+           	SELECT IB_TICKER FROM DIM_STOCKS;     
+        ''' \
+            .format(tickers_str)
+        data = self.readDatabase(sqlQuery)
+        return data.to_list()
+        
     # Add a new stock with code "stockCode" to the portfolio
     def addStock(self, stockCode, percentage):
         newStock = ValueStock(stockCode, percentage, self.stockDatabase)
         self.stockList.append(newStock)
         return newStock
-     
-        
+    
     # Calculate the total value of the portfolio on a particular date
     def getValue(self, date = DEFAULT_DATE):
         result = None

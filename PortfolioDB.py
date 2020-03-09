@@ -17,13 +17,13 @@ from Database import Database
 ###############
 ## Constants ##
 ###############
-DEFAULT_DATE = str(date.today())
-DEFAULT_STARTDATE = "1975-01-01"
+# utils.DEFAULT_DATE = str(date.today())+ " 00:00:00"
+# utils.DEFAULT_STARTDATE = "1975-01-01 00:00:00"
 
 class PortfolioDB(Database):
     
     # Filter transactions table FACT_TRANSACTIONS for a range of dates and tickers
-    def getTransactions(self, tickers, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE, direction = "BOUGHT"):
+    def getTransactions(self, tickers, startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE, direction = "BOUGHT"):
         
         tickers_str = ""
         for ticker in tickers[:-1]:
@@ -71,7 +71,7 @@ class PortfolioDB(Database):
         return data
     
     # Filter historical prices table FACT_HISTPRICES for a range of dates and tickers
-    def getPrices(self, tickers, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
+    def getPrices(self, tickers, startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE):
         
         tickers_str = ""
         for ticker in tickers[:-1]:
@@ -86,12 +86,13 @@ class PortfolioDB(Database):
         	ORDER BY IB_TICKER, DATE;     
         ''' \
             .format(tickers_str, startDate, endDate)
-        data = self.readDatabase(sqlQuery) 
+        data = self.readDatabase(sqlQuery)
+        data[self.DATE] = pd.to_datetime(data[self.DATE], format = '%Y-%m-%d %H:%M:%S')
         return data
     
 
     # Filter historical dividends table FACT_DIVIDENDS for a range of dates and tickers
-    def getDividends(self, tickers, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
+    def getDividends(self, tickers, startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE):
         
         tickers_str = ""
         for ticker in tickers[:-1]:
@@ -136,7 +137,7 @@ class PortfolioDB(Database):
             # Increment date by 1 day
             minDate = utils.incrementDate(minDate)
             
-            if utils.convertDate(minDate) < datetime.today().date():
+            if utils.convertDate(minDate) < datetime.today():
                 # Updates stock data
                 self.stockScrape(stockCode, minDate)
             else:
@@ -156,26 +157,28 @@ class PortfolioDB(Database):
         
     # function which does the first time initialization of the stock and 
     #downloads all past stock data, returns array of dates, and array of data
-    def stockScrape(self, stockCode, minDate = '1975-01-01'):
+    def stockScrape(self, stockCode, minDate = utils.DEFAULT_STARTDATE):
         # Initialize pandas dataframe to hold stock data    
         stockDataFrame =  pd.DataFrame({self.DATE: [], self.IB_TICKER: [], self.PRICE: []});
 
         if stockCode == 'EUR':
             sdate = utils.convertDate(minDate)  # start date
-            edate = datetime.date.today()   # end date
+            edate = datetime.now()
+            edate = edate.replace(hour=0, minute=0, second=0, microsecond=0) # end date
             
             delta = edate - sdate       # as timedelta
             
             for i in range(delta.days + 1):
-                day = sdate + datetime.timedelta(days=i)
-                day = datetime.datetime.combine(day, datetime.datetime.min.time())
+                day = sdate + timedelta(days=i)
+                day = datetime.combine(day, datetime.min.time())
                 stockDataFrame.loc[i] = [day] + ['EUR'] + [1] 
         else:
          
             YahooCode = self.getYahooCode(stockCode)
             stock = yf.Ticker(YahooCode)
-        
-            dowloaded_data = stock.history(interval="1d", start = minDate)
+            
+            sdate = utils.convertDate(minDate)  # start date
+            dowloaded_data = stock.history(interval="1d", start = sdate)
         
             # Manipulate the output
             Dates = dowloaded_data.index.to_frame()

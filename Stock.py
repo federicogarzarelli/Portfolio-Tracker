@@ -6,7 +6,7 @@ Created on Fri Nov 25 11:32:32 2016
 @author: dmcauslan
 
 Stock class that contains the information
-- Number owned
+- Number OWNED
 - Total cost
 - Stock Code
 - Currency
@@ -27,20 +27,20 @@ Modified 30/11/2016:
     * Implemented getPriceRange() method which gets the price of the stock over a
     range of dates.
     * Implemented getValueRange() method which gets a data frame containing Date,
-    Total_Owned and Total_Value for a range of dates.
+    Total_OWNED and Total_Value for a range of dates.
 Modified 01/12/2016:
     * Implemented sell() method for selling some of the stock.
     * Implemented remove() method for removing a transaction from the database
     (incase you made an error when adding it)
     * Fixed getValueRange() method so that it works with selling.
     * Removed TOTAL_OWNED column from database as it calculates incorrectly
-    when purchases are not added in date order. TOTAL owned column can easily be
+    when purchases are not added in date order. TOTAL OWNED column can easily be
     generated in SQL using SUM(NUMBER_PURCHASED) AS TOTAL_OWNED.
     * Split getValueRange() method into getOwnedRange() and getValueRange() methods.
-    * Implemented plot method which plots date vs total value, number owned, stock price and profit.
+    * Implemented plot method which plots date vs total value, number OWNED, stock price and profit.
     * Implemented getSpentRange() method which calculates the amount spent over a
     range of dates.
-    * Modified contstructor so that it gets the total number of shares owned and
+    * Modified contstructor so that it gets the total number of shares OWNED and
     total amount spent from the data base on initializaiton.
 Modified 02/12/2016:
     * Added addDividend(), removeDividend() and getDividend() methods, which add
@@ -72,8 +72,8 @@ import utils
 ###############
 ## Constants ##
 ###############
-DEFAULT_DATE = str(datetime.date.today())
-DEFAULT_STARTDATE = "1975-01-01"
+# utils.DEFAULT_DATE = str(datetime.date.today())+ " 00:00:00"
+# utils.DEFAULT_STARTDATE = "1975-01-01 00:00:00"
 
 # Class for holding the information of an individual stock.
 # Parameters:   numberOwned
@@ -96,14 +96,20 @@ class Stock:
           self.database.updateStockData(self.stockCode)
       except urllib.request.URLError:
           print("{} data not updated. URL Error.".format(self.stockCode))
-      
+     
+    # Class string method
+    def __str__(self):
+         return "{} - number OWNED: {}, total cost: ${:.2f}, total dividend: ${:.2f}." \
+                .format(self.stockCode, self.numberOwned, self.totalCost, self.totalDividend)
+
+    def update(self): # to run after all the stocks have been updated
       # Updates the numberOwned, totalCost and totalDividend values
       numOwned = self.getOwned()
       if numOwned != None:
           self.numberOwned = numOwned
       amountSpent = self.getSpent()
       if amountSpent != None:
-          self.totalCost = amountSpent
+          self.amountSpent = amountSpent
       dividend = self.getDividend()
       if dividend != None:
           self.totalDividend = dividend
@@ -111,17 +117,10 @@ class Stock:
       currency  = currency.loc[0,self.database.YAHOO_CURRENCY]
       if currency != None:
           self.currency = currency
-    
-    # Class string method
-    def __str__(self):
-         return "{} - number owned: {}, total cost: ${:.2f}, total dividend: ${:.2f}." \
-                .format(self.stockCode, self.numberOwned, self.totalCost, self.totalDividend)
 
 
     # Buy a number of stocks at a price and save in the database
-    def buy(self, quantity_bought, instrument_sold, quantity_sold, commission, date = DEFAULT_DATE):
-        self.numberOwned += quantity_bought
-        #self.totalCost += quantity_bought*price  # to update
+    def buy(self, quantity_bought, instrument_sold, quantity_sold, commission, date = utils.DEFAULT_DATE):
         purchaseData = pd.DataFrame({self.database.DATE: [date],
                                      self.database.INSTRUMENT_BOUGHT: [self.stockCode],
                                      self.database.QUANTITY_BOUGHT: [quantity_bought],
@@ -131,9 +130,7 @@ class Stock:
         self.database.addToDatabase(purchaseData, self.database.TRANSACTIONS_TABLE_NAME)
     
     # Sell a number of stocks at a price and save in the database     
-    def sell(self, quantity_bought, instrument_bought, quantity_sold, commission, date = DEFAULT_DATE):
-        self.numberOwned -= quantity_sold
-        #self.totalCost += quantity_bought*price  # to update
+    def sell(self, quantity_bought, instrument_bought, quantity_sold, commission, date = utils.DEFAULT_DATE):
         purchaseData = pd.DataFrame({self.database.DATE: [date],
                                      self.database.INSTRUMENT_BOUGHT: [instrument_bought],
                                      self.database.QUANTITY_BOUGHT: [quantity_bought],
@@ -143,8 +140,7 @@ class Stock:
         self.database.addToDatabase(purchaseData, self.database.TRANSACTIONS_TABLE_NAME)
     
     # Adds a dividend payment to the dividend database table
-    def addDividend(self, payment, date = DEFAULT_DATE):
-        self.totalDividend += payment
+    def addDividend(self, payment, date = utils.DEFAULT_DATE):
         dividendData = pd.DataFrame({self.database.DIVIDEND_DATE: [date],
                                      self.database.IB_TICKER: [self.stockCode],
                                      self.database.DIVIDEND_AMOUNT: [payment]})
@@ -152,7 +148,6 @@ class Stock:
     
     # Removes a divident payment from the dividend database table
     def removeDividend(self, payment, date):
-        self.totalDividend -= payment
         sqlCommand = '''DELETE FROM {} 
             WHERE {} LIKE '{}'
             AND {} == {}
@@ -161,75 +156,82 @@ class Stock:
                     self.database.IB_TICKER, self.stockCode,
                     self.database.DIVIDEND_AMOUNT, payment,
                     self.database.DIVIDEND_DATE, date)
-        rowsRemoved = self.database.executeCommand(sqlCommand)
-        
+        rowsRemoved = self.database.executeCommand(sqlCommand)  
         # Check whether the data removal was succesful. If not, user most likely
         # made an input error, so throw a ValueError so they know about it.
         if rowsRemoved == 0:
             self.totalDividend += payment
             raise ValueError("Dividend payment of ${} was not in database. Module: removeDividend.".format(payment, date))
     
-    # Get the number of the stock owned at date. Default date is today.
-    def getOwned(self, date = DEFAULT_DATE):
-        ownedRange = self.getOwnedRange(startDate = DEFAULT_STARTDATE, endDate = date)
-        self.database.TOTAL_OWNED = ownedRange.loc[date, "Owned"]
-        return self.database.TOTAL_OWNED
+    # Get the number of the stock OWNED at date. Default date is today.
+    def getOwned(self, date = utils.DEFAULT_DATE):
+        OwnedRange = self.getOwnedRange(startDate = utils.DEFAULT_STARTDATE, endDate = date)
+        self.database.TOTAL_OWNED = OwnedRange.loc[OwnedRange[self.database.DATE]==date,"OWNED"]
+        return self.database.TOTAL_OWNED.values[0]
         
     # Get the number of the stock sold at date. Default date is today.
-    def getSold(self, date = DEFAULT_DATE):
-        data = self.soldRange(startDate = DEFAULT_STARTDATE, endDate = date)
+    def getSold(self, date = utils.DEFAULT_DATE):
+        data = self.soldRange(startDate = utils.DEFAULT_STARTDATE, endDate = date)
         # If data is empty return 0
         if data.empty:
             print('No data for dates up to {}. Method: Stock.getSold.'.format(date))
             return 0
-        return data.loc[date, "SoldCumSum"]
+        return data.loc[data[self.database.DATE]==date,"SOLD_CUMSUM"].values[0]
 
    # Get the number of the bought sold at date. Default date is today.
-    def getBought(self, date = DEFAULT_DATE):
-        data = self.soldRange(startDate = DEFAULT_STARTDATE, endDate = date)
+    def getBought(self, date = utils.DEFAULT_DATE):
+        data = self.soldRange(startDate = utils.DEFAULT_STARTDATE, endDate = date)
         # If data is empty return 0
         if data.empty:
             print('No data for dates up to {}. Method: Stock.getBought.'.format(date))
             return 0
-        return data.loc[date, "BoughtCumSum"]
+        return data.loc[data[self.database.DATE]==date,"BOUGHT_CUMSUM"].values[0]
                
     # Get the total spent as price paid + commissions
-    def getSpent(self, date = DEFAULT_DATE):
-        data = self.getSpentRange(self,  startDate = DEFAULT_STARTDATE, endDate = date)
-        return data.loc[date, "SPENT_EUR_CUMSUM"]
+    def getSpent(self, date = utils.DEFAULT_DATE):
+        data = self.getSpentRange(startDate = utils.DEFAULT_STARTDATE, endDate = date)
+        if data.empty:
+            print('No data for dates up to {}. Method: Stock.getSpent.'.format(date))
+            return 0
+        return data.loc[data[self.database.DATE]==date,"SPENT_EUR_CUMSUM"].values[0]
     
      # Get the total price paid in Euros for a stock. Default date is today.
-    def getPricePaid(self, date = DEFAULT_DATE):
-        data = self.getPricePaidRange(startDate = DEFAULT_STARTDATE, endDate = date)
-        return data.loc[date, "PRICEPAID_EUR_CUMSUM"]
+    def getPricePaid(self, date = utils.DEFAULT_DATE):
+        data = self.getPricePaidRange(startDate = utils.DEFAULT_STARTDATE, endDate = date)
+        if data.empty:
+            print('No data for dates up to {}. Method: Stock.getPricePaid.'.format(date))
+            return 0
+        return data.loc[data[self.database.DATE]==date,"PRICEPAID_EUR_CUMSUM"].values[0]
               
     # Get the total commissions paid in Euros for a stock. Default date is today.
-    def getCommissions(self, date = DEFAULT_DATE):
-        data = self.getCommissionsRange(startDate = DEFAULT_STARTDATE, endDate = date)
-        return data.loc[date, "COMMISSION_EUR_CUMSUM"]
+    def getCommissions(self, date = utils.DEFAULT_DATE):
+        data = self.getCommissionsRange(startDate = utils.DEFAULT_STARTDATE, endDate = date)
+        if data.empty:
+            print('No data for dates up to {}. Method: Stock.getCommissions.'.format(date))
+            return 0
+        return data.loc[data[self.database.DATE]==date,"COMMISSION_EUR_CUMSUM"].values[0]
 
     # Get the price of the stock at date. Default date is today.
-    def getPrice(self, date = DEFAULT_DATE):
-        data = self.getPriceRange(startDate = DEFAULT_STARTDATE, endDate = date)
+    def getPrice(self, date = utils.DEFAULT_DATE):
+        data = self.getPriceRange(startDate = utils.DEFAULT_STARTDATE, endDate = date)
         
         # If data is empty raise ValueError
         if data.empty:
             raise ValueError(('No price data for {}. Method: Stock.getPrice.'.format(date)))
-        return data.at[date, self.database.PRICE]
+        return data.loc[data[self.database.DATE]==date,self.database.PRICE].values[0]
 
     # get the total value of the stock at date. Default date is today.
-    def getValue(self, date = DEFAULT_DATE):
+    def getValue(self, date = utils.DEFAULT_DATE):
         return self.getOwned(date) * self.getPrice(date)
         
     # Get the total amount of dividend payments at date.
-    def getDividend(self, date = DEFAULT_DATE):
-        data = self.getDividendRange(startDate = DEFAULT_STARTDATE, endDate = date)
-               
+    def getDividend(self, date = utils.DEFAULT_DATE):
+        data = self.getDividendRange(startDate = utils.DEFAULT_STARTDATE, endDate = date)          
         # If data is empty return 0
         if data.empty:
             print(('No dividend data for {}. Method: Stock.getDividend.'.format(date)))
             return 0
-        return data.loc[date, "DividendCumSum"]
+        return data.loc[data[self.database.DIVIDEND_DATE]==date,"DIVIDEND_CUMSUM"].values[0]
 
     # Get the currencies (YAHOO_CURRENCY) of a list of stocks
     def getCurrency(self, tickers):
@@ -240,7 +242,6 @@ class Stock:
         tickers_str = tickers_str + '"' + tickers[-1] + '"'
         
         data = self.database.getStockInfo(tickers)
-    
         # If data is empty return 0
         if data.empty:
             print(('No currency for {}. Method: Stock.getCurrency.'.format(tickers_str)))
@@ -251,8 +252,15 @@ class Stock:
     ################ Range functions ###########################
     ## Similar to the ones up but for a range of dates
     
+    def Profits_LossesRange(self, startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE):
+        spent = self.getSpentRange(startDate, endDate)
+        value = self.getValueRange(startDate, endDate)
+        
+        Dates = pd.DataFrame(pd.date_range(startDate, endDate), columns = [self.database.DATE])
+        
+    
     # Get a data frame containing the price of the stock over a range of dates    
-    def getPriceRange(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
+    def getPriceRange(self, startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE):
         tickers = [self.stockCode]
         data = self.database.getPrices(tickers, startDate, endDate)
         
@@ -261,13 +269,13 @@ class Stock:
             raise ValueError(('No price data in the range {} - {}. Method: Stock.getPriceRange'.format(startDate, endDate)))
         return data[[self.database.DATE, self.database.PRICE]]
     
-    # Gets a dataframe containing the number of shares owned over a range of dates    
-    def getOwnedRange(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
+    # Gets a dataframe containing the number of shares OWNED over a range of dates    
+    def getOwnedRange(self, startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE):
         bought = self.getBoughtRange(startDate, endDate)
         sold = self.getSoldRange(startDate, endDate)
         
-        data = pd.merge(bought, sold, how = 'inner', on = self.database.DATE)
-        data['Owned'] = data['BoughtCumSum'] - data['SoldCumSum'] 
+        data = pd.merge(bought, sold, how = 'outer', on = self.database.DATE)
+        data['OWNED'] = data['BOUGHT_CUMSUM'] - data['SOLD_CUMSUM'] 
         
         if data.empty:
             print('No data for dates up to {}. Method: Stock.getOwnedRange.'.format(endDate))
@@ -275,13 +283,15 @@ class Stock:
         return data
 
    # Get the number of the stock sold at date over a range of dates. Default end date is today.
-    def getSoldRange(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
-        data  = self.database.getTransactions([self.stockCode], startDate, endDate, direction = "SOLD")
-        data[self.database.DATE] = utils.convertDate(data[self.database.DATE]) # Transform date into datetime
+    def getSoldRange(self, startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE):
+        sold  = self.database.getTransactions([self.stockCode], startDate, endDate, direction = "SOLD")
+        sold = sold[[self.database.DATE, self.database.QUANTITY_SOLD]]
+        sold[self.database.DATE] = pd.to_datetime(sold[self.database.DATE], format = '%Y-%m-%d %H:%M:%S')# Transform date into datetime
         Dates = pd.DataFrame(pd.date_range(startDate, endDate), columns = [self.database.DATE])
         
-        data_Dates = pd.merge(Dates, data, how = "left", on = self.database.DATE)
-        data_Dates['SoldCumSum'] = data_Dates[self.database.QUANTITY_SOLD].cumsum() 
+        data = pd.merge(Dates, sold, how = "left", on = self.database.DATE)
+        data = data.fillna(0)
+        data['SOLD_CUMSUM'] = data[self.database.QUANTITY_SOLD].cumsum() 
         
         # If data is empty return 0
         if data.empty:
@@ -290,12 +300,15 @@ class Stock:
         return data
 
    # Get the number of the bought sold at date over a range of dates. Default end date is today.
-    def getBoughtRange(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
-        data  = self.database.getTransactions([self.stockCode], startDate, endDate, direction = "BOUGHT")
-        data[self.database.DATE] = utils.convertDate(data[self.database.DATE]) # Transform date into datetime
+    def getBoughtRange(self, startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE):
+        bought  = self.database.getTransactions([self.stockCode], startDate, endDate, direction = "BOUGHT")
+        bought = bought[[self.database.DATE, self.database.QUANTITY_BOUGHT]]
+        bought[self.database.DATE] = pd.to_datetime(bought[self.database.DATE], format = '%Y-%m-%d %H:%M:%S') # Transform date into datetime
         Dates = pd.DataFrame(pd.date_range(startDate, endDate), columns = [self.database.DATE])
-        data_Dates = pd.merge(Dates, data, how = "left", on = self.database.DATE)
-        data_Dates['SoldCumSum'] = data_Dates[self.database.QUANTITY_BOUGHT].cumsum() 
+        
+        data = pd.merge(Dates, bought, how = "left", on = self.database.DATE)
+        data = data.fillna(0)
+        data['BOUGHT_CUMSUM'] = data[self.database.QUANTITY_BOUGHT].cumsum() 
         # If data is empty return 0
         if data.empty:
             print('No data for dates up to {}. Method: Stock.getBoughtRange.'.format(endDate))
@@ -303,11 +316,11 @@ class Stock:
         return data
 
     # Get the total price paid in Euros for a stock for a range of dates. Default enddate is today.
-    def getPricePaidRange(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
+    def getPricePaidRange(self, startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE):
         # Get the number of sold assets used to buy this stock
         cost  = self.database.getTransactions([self.stockCode], startDate, endDate, direction = "BOUGHT")
         cost = cost.sort_values(by=['DATE', 'INSTRUMENT_SOLD'], ascending = True)
-        cost['DATE'] = utils.convertDate(cost['DATE'])
+        cost[self.database.DATE] = pd.to_datetime(cost[self.database.DATE], format = '%Y-%m-%d %H:%M:%S')
         
         # Get the price of the sold assets on that date (this is CCYEUR exchange rate when a currency is used to pay)
         tickers_list = cost['INSTRUMENT_SOLD'].drop_duplicates().values.tolist() # list of instruments sold
@@ -326,7 +339,7 @@ class Stock:
         # Get the CCYEUR rates       
         tickers_list = price_curr['YAHOO_CURRENCY'].drop_duplicates().values.tolist() # list of currencies of the instruments sold
         priceYAHOOCURR = self.database.getPrices(tickers_list, startDate, endDate) 
-        priceYAHOOCURR['DATE'] = utils.convertDate(priceYAHOOCURR['DATE'])
+        priceYAHOOCURR[self.database.DATE] = pd.to_datetime(priceYAHOOCURR[self.database.DATE], format = '%Y-%m-%d %H:%M:%S')
         priceYAHOOCURR = priceYAHOOCURR.sort_values(by=['DATE', 'IB_TICKER'], ascending = True)
         priceYAHOOCURR.columns = ['DATE', 'YAHOO_CURRENCY', 'PRICE_YAHOO_CURRENCY']
         
@@ -338,41 +351,57 @@ class Stock:
         
         # Calculate the price in EUR per transaction and add the cumulative sum
         cost_price_curr2['PRICEPAID_EUR'] =  cost_price_curr2['QUANTITY_SOLD'] *  cost_price_curr2['PRICE_INSTRUMENT_SOLD'] * cost_price_curr2['PRICE_YAHOO_CURRENCY']
-        cost_price_curr2['PRICEPAID_EUR_CUMSUM'] = cost_price_curr2['PRICEPAID_EUR'].cumsum()
+
+        
+        # Now create a series of dates and join to it
+        cost_price_curr2[self.database.DATE] = pd.to_datetime(cost_price_curr2[self.database.DATE], format = '%Y-%m-%d %H:%M:%S')# Transform date into datetime
+        Dates = pd.DataFrame(pd.date_range(startDate, endDate), columns = [self.database.DATE])
+        
+        data = pd.merge(Dates, cost_price_curr2, how = "left", on = self.database.DATE)
+        data = data.fillna(0)
+        data['PRICEPAID_EUR_CUMSUM'] = data['PRICEPAID_EUR'].cumsum()
+        
         # If data is empty return 0
-        if cost_price_curr2.empty:
+        if data.empty:
             print('No prices paid for dates up to {}. Method: Stock.getPricePaidRange.'.format(endDate))
             return 0
-        return cost_price_curr2[[self.database.DATE,'PRICEPAID_EUR_CUMSUM']]
+        return data[[self.database.DATE,'PRICEPAID_EUR_CUMSUM']]
               
     # Get the total commissions paid in Euros for a stock for a range of dates. Default end date is today.
-    def getCommissionsRange(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
+    def getCommissionsRange(self, startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE):
         # Get the commissions paid for a stock
         commissionsCHF  = self.database.getTransactions([self.stockCode], startDate, endDate, direction = "BOUGHT")
         commissionsCHF = commissionsCHF.sort_values(by=['DATE'], ascending = True)
         
         # Get the CHFEUR rates to convert the commissions to EUR              
-        CHFEUR = self.database.getPrices("CHF", startDate, endDate)
+        CHFEUR = self.database.getPrices(["CHF"], startDate, endDate)
         CHFEUR = CHFEUR.sort_values(by=['DATE'], ascending = True)
 
         # Transform DATE to datetime and merge the commission date to the previous available date 
-        commissionsCHF['DATE'] = utils.convertDate(commissionsCHF['DATE'])
-        CHFEUR['DATE'] = utils.convertDate(CHFEUR['DATE'])
+        commissionsCHF[self.database.DATE] = pd.to_datetime(commissionsCHF[self.database.DATE], format = '%Y-%m-%d %H:%M:%S')
+        CHFEUR[self.database.DATE] =  pd.to_datetime(CHFEUR[self.database.DATE], format = '%Y-%m-%d %H:%M:%S')
                
         commissionsCHF_L_CHFEUR = pd.merge_asof(commissionsCHF, CHFEUR, on='DATE')
         
         # Convert the commission in EUR and add the cumulative sum
         commissionsCHF_L_CHFEUR['COMMISSION_EUR'] = commissionsCHF_L_CHFEUR['COMMISSION'] * commissionsCHF_L_CHFEUR['PRICE']
-        commissionsCHF_L_CHFEUR['COMMISSION_EUR_CUMSUM'] = commissionsCHF_L_CHFEUR['COMMISSION_EUR'].cumsum()
+
+        # Now create a series of dates and join to it
+        commissionsCHF_L_CHFEUR[self.database.DATE] = pd.to_datetime(commissionsCHF_L_CHFEUR[self.database.DATE], format = '%Y-%m-%d %H:%M:%S')# Transform date into datetime
+        Dates = pd.DataFrame(pd.date_range(startDate, endDate), columns = [self.database.DATE])
+        
+        data = pd.merge(Dates, commissionsCHF_L_CHFEUR, how = "left", on = self.database.DATE)
+        data = data.fillna(0)
+        data['COMMISSION_EUR_CUMSUM'] = data['COMMISSION_EUR'].cumsum()
 
         # If data is empty return 0
-        if commissionsCHF_L_CHFEUR.empty:
+        if data.empty:
             print('No commissions for dates up to {}. Method: Stock.getCommissionsRange.'.format(endDate))
             return 0
-        return commissionsCHF_L_CHFEUR[[self.database.DATE,'COMMISSION_EUR_CUMSUM']]
+        return data[[self.database.DATE,'COMMISSION_EUR_CUMSUM']]
 
     # Get the total spent as price paid + commissions for a range of dates. Default end date is today
-    def getSpentRange(self,  startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
+    def getSpentRange(self,  startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE):
         pricepaid = self.getPricePaidRange(startDate, endDate) 
         commissions = self.getCommissionsRange(startDate, endDate)
         
@@ -385,15 +414,15 @@ class Stock:
         return data
     
     # Get a dataframe containing the total value of the stock over a range of dates
-    def getValueRange(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
-        # Get the price and the number of owned share by date
+    def getValueRange(self, startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE):
+        # Get the price and the number of OWNED share by date
         price = self.getPriceRange(startDate, endDate)
-        owned = self.getOwnedRange(startDate, endDate)
-        owned[self.database.DATE] = utils.convertDate(owned[self.database.DATE])  # Transform date into datetime
+        OWNED = self.getOwnedRange(startDate, endDate)
+        OWNED[self.database.DATE] = pd.to_datetime(OWNED[self.database.DATE], format = '%Y-%m-%d %H:%M:%S')  # Transform date into datetime
         
-        price_owned = pd.merge(price, owned, on=self.database.DATE)
+        price_OWNED = pd.merge(price, OWNED, how = "left", on=self.database.DATE)
         # Add a column for the total value of the stock
-        price_owned['Total_Value'] = price_owned[self.database.PRICE] * price_owned['Owned']
+        price_OWNED['Total_Value'] = price_OWNED[self.database.PRICE] * price_OWNED['OWNED']
         
         # Convert to EUR
         # 1. Get the currency of the stock and the corresponding CCYEUR rate
@@ -401,17 +430,17 @@ class Stock:
         currency_list = currencies[self.database.YAHOO_CURRENCY].tolist()
         # 2. Get the exchange rate
         priceYAHOOCURR = self.database.getPrices(currency_list, startDate, endDate)
-        priceYAHOOCURR['DATE'] = utils.convertDate(priceYAHOOCURR['DATE'])
+        priceYAHOOCURR[self.database.DATE] = pd.to_datetime(priceYAHOOCURR[self.database.DATE], format = '%Y-%m-%d %H:%M:%S')
         priceYAHOOCURR = priceYAHOOCURR.sort_values(by=['DATE', 'IB_TICKER'], ascending = True)
         priceYAHOOCURR.columns = ['DATE', 'YAHOO_CURRENCY', 'PRICE_YAHOO_CURRENCY']
         # 3. Merge the exchange rate to the price on the closest (earlier) date
-        data = pd.merge_asof(price_owned, priceYAHOOCURR, on='DATE', by='YAHOO_CURRENCY')
+        data = pd.merge_asof(price_OWNED, priceYAHOOCURR, on='DATE', by='YAHOO_CURRENCY')
         # 4. Calculate the value of the position in EUR
         data['VALUE_EUR'] =  data['Total_Value'] * data['PRICE_YAHOO_CURRENCY']
         
         # For any dates before the first purchase, set the total value to 0.
         data = data.fillna(0)
-        # Remove the price and number owned columns
+        # Remove the price and number OWNED columns
         data = data.drop([self.database.PRICE, self.database.TOTAL_OWNED], 1)
         
         if data.empty:
@@ -420,18 +449,18 @@ class Stock:
         return data
         
     # Gets a dataframe containing the total amount of dividend income over a range of dates    
-    def getDividendRange(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
+    def getDividendRange(self, startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE):
         tickers = [self.stockCode]
         dividends = self.database.getDividends(tickers, startDate, endDate)
-        dividends[self.database.DATE] = utils.convertDate(dividends[self.database.DATE]) # Transform date into datetime
+        dividends[self.database.DIVIDEND_DATE] = pd.to_datetime(dividends[self.database.DIVIDEND_DATE], format = '%Y-%m-%d %H:%M:%S') # Transform date into datetime
         
-        Dates = pd.DataFrame(pd.date_range(startDate, endDate), columns = [self.database.DATE])
-        data = pd.merge(Dates, dividends, how = "left", on = self.database.DATE)
-        data['DividendCumSum'] = data[self.database.DIVIDEND_AMOUNT].cumsum() 
-           
-        data = data[[self.database.DATE, 'DividendCumSum']]
+        Dates = pd.DataFrame(pd.date_range(startDate, endDate), columns = [self.database.DIVIDEND_DATE])
+        data = pd.merge(Dates, dividends, how = "left", on = self.database.DIVIDEND_DATE)
         data = data.fillna(0)
-        
+        data['DIVIDEND_CUMSUM'] = data[self.database.DIVIDEND_AMOUNT].cumsum() 
+           
+        data = data[[self.database.DIVIDEND_DATE, 'DIVIDEND_CUMSUM']]
+
         if data.empty:
             print('No data for dates up to {}. Method: Stock.getDividendRange.'.format(endDate))
             return 0
@@ -439,12 +468,12 @@ class Stock:
         
         
 #    # Plot stock data in a range of dates
-#    def plot(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
+#    def plot(self, startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE):
 #        # Format data to be plotted
 #        date = self.getValueRange(startDate, endDate)[database.DATE].tolist()
 #        date = list(map(utils.convertDate, date))
 #        value = self.getValueRange(startDate, endDate)["Total_Value"]
-#        owned = self.getOwnedRange(startDate, endDate)[database.TOTAL_OWNED]
+#        OWNED = self.getOwnedRange(startDate, endDate)[database.TOTAL_OWNED]
 #        price = self.getPriceRange(startDate, endDate)[database.PRICE]
 #        spent = self.getSpentRange(startDate, endDate)[database.TOTAL_SPENT]
 #        dividend = self.getDividendRange(startDate, endDate)[database.DIVIDEND_TOTAL]
@@ -462,8 +491,8 @@ class Stock:
 #        
 #        sns.set_style("dark")
 #        ax = fig.add_subplot(412)  
-#        ax.plot(date, owned)
-#        ax.set_ylabel("Number of shares owned", fontsize = 14, color = sns.color_palette()[0])
+#        ax.plot(date, OWNED)
+#        ax.set_ylabel("Number of shares OWNED", fontsize = 14, color = sns.color_palette()[0])
 #        ax2 = ax.twinx()
 #        ax2.plot(date, dividend, color = sns.color_palette()[1])
 #        ax2.set_ylabel("Total Dividend ($)", fontsize = 14, color = sns.color_palette()[1])
