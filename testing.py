@@ -7,43 +7,27 @@ Created on Wed Mar  4 20:34:14 2020
 
 import pandas as pd
 from Database import Database
+from PortfolioDB import PortfolioDB
 import Stock as ST
 import utils 
-import datetime
-import PortfolioDB
+from datetime import datetime, date
 
 databasePath = "MyPortfolio.db"
 
-stockCode = "EUR"
-
-DEFAULT_DATE = str(datetime.date.today())
+DEFAULT_DATE = str(date.today())
 DEFAULT_STARTDATE = "1975-01-01"
 
 
 MyPortfolioDB = PortfolioDB(databasePath)
-EUR = ST.Stock(stockCode, MyPortfolioDB)
-##SGLD.plot()
-#
-#
-#EUR.getCHFEURRange(startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE)
+
+EUR = ST.Stock("EUR", MyPortfolioDB)
+EIMI = ST.Stock("EIMI", MyPortfolioDB)
 
 
+print(EIMI.stockCode)
+print(EIMI.numberOwned)
+print(EIMI.amountSpent)
+print(EIMI.totalDividend)
+print(EIMI.currency)
 
-
-# Test PortfolioDB
-
-#tickers = ["CHF", "EIMI", "IDJV"]
-#startDate = DEFAULT_STARTDATE
-#endDate = DEFAULT_DATE
-#
-#
-#
-#trans = MyPortfolioDB.getTransactions(tickers, startDate, endDate)
-#StockInfo = MyPortfolioDB.getStockInfo(tickers)
-#Prices = MyPortfolioDB.getPrices(tickers, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE)
-#Dividends = MyPortfolioDB.getDividends(tickers, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE)
-
-minDate = "1975-01-01"
-
-    
      

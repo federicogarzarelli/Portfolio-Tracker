@@ -10,10 +10,9 @@ Created on Sun Mar  8 11:50:49 2020
 import utils
 import pandas as pd
 from datetime import datetime, timedelta, date
-import utils
 import yfinance as yf # https://aroussi.com/post/python-yahoo-finance
 # pip install yfinance --upgrade --no-cache-dir
-import Database
+from Database import Database
 
 ###############
 ## Constants ##
@@ -24,7 +23,7 @@ DEFAULT_STARTDATE = "1975-01-01"
 class PortfolioDB(Database):
     
     # Filter transactions table FACT_TRANSACTIONS for a range of dates and tickers
-    def getTransactions(self, tickers, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
+    def getTransactions(self, tickers, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE, direction = "BOUGHT"):
         
         tickers_str = ""
         for ticker in tickers[:-1]:
@@ -32,13 +31,24 @@ class PortfolioDB(Database):
             
         tickers_str = tickers_str + '"' + tickers[-1] + '"'
         
-        sqlQuery = '''
-           	SELECT *
-        	FROM FACT_TRANSACTIONS 
-        	WHERE INSTRUMENT_BOUGHT in ({}) and datetime(DATE) BETWEEN date("{}") AND date("{}")
-        	ORDER BY TRANSACTION_ID;     
-        ''' \
-            .format(tickers_str, startDate, endDate)
+        if direction == "BOUGHT":
+            sqlQuery = '''
+               	SELECT *
+            	FROM FACT_TRANSACTIONS 
+            	WHERE INSTRUMENT_BOUGHT in ({}) and datetime(DATE) BETWEEN date("{}") AND date("{}")
+            	ORDER BY TRANSACTION_ID;     
+            ''' \
+                .format(tickers_str, startDate, endDate)
+        elif direction == "SOLD":
+            sqlQuery = '''
+               	SELECT *
+            	FROM FACT_TRANSACTIONS 
+            	WHERE INSTRUMENT_SOLD in ({}) and datetime(DATE) BETWEEN date("{}") AND date("{}")
+            	ORDER BY TRANSACTION_ID;     
+            ''' \
+                .format(tickers_str, startDate, endDate)
+        else:
+            raise ValueError("Invalid option provided")
         data = self.readDatabase(sqlQuery) 
         return data
     
@@ -126,7 +136,7 @@ class PortfolioDB(Database):
             # Increment date by 1 day
             minDate = utils.incrementDate(minDate)
             
-            if utils.convertDate(minDate) < datetime.datetime.today().date():
+            if utils.convertDate(minDate) < datetime.today().date():
                 # Updates stock data
                 self.stockScrape(stockCode, minDate)
             else:
@@ -160,7 +170,6 @@ class PortfolioDB(Database):
                 day = sdate + datetime.timedelta(days=i)
                 day = datetime.datetime.combine(day, datetime.datetime.min.time())
                 stockDataFrame.loc[i] = [day] + ['EUR'] + [1] 
-
         else:
          
             YahooCode = self.getYahooCode(stockCode)
