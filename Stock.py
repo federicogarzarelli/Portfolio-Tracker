@@ -63,8 +63,6 @@ Modified 04/03/2020:
 """
 import datetime
 import pandas as pd
-import stockContract as SC
-import stockDownloader as downloader
 import seaborn as sns
 import matplotlib.pyplot as plt
 import urllib.request
@@ -92,7 +90,7 @@ class Stock:
       self.database = database
       # Updates the database with any price data that it does not have.
       try:
-          downloader.updateStockData(self.stockCode, self.database)
+          self.database.updateStockData(self.stockCode)
       except urllib.request.URLError:
           print("{} data not updated. URL Error.".format(self.stockCode))
       
@@ -116,66 +114,37 @@ class Stock:
                 .format(self.stockCode, self.numberOwned, self.totalCost, self.totalDividend)
 
 
-
-    def buy(self, numberBought, instrument_sold, quantity_sold, commission, date = DEFAULT_DATE):
-        self.numberOwned += numberBought
-        self.totalCost += numberBought*price
-        purchaseData = pd.DataFrame({SC.CODE: [self.stockCode],
-                                     SC.DATE: [date],
-                                     SC.NUMBER_PURCHASED: [numberBought],
-                                     SC.INSTRUMENT_SOLD: [instrument_sold],
-                                     SC.QUANTITY_SOLD: quantity_sold,
-                                     SC.COMMISSION: [commission]})
-        self.database.addToDatabase(purchaseData, SC.TABLE_NAME)
-#    
-#################### to update ##############################        
-#    # Sell a number of stocks at a price and save in the database     
-#    def sell(self, numberSold, price, date = DEFAULT_DATE):
-#        self.numberOwned -= numberSold
-#        if self.numberOwned < 0:
-#            self.numberOwned += numberSold      # Not sure if this is necessary
-#            raise ValueError("Can't sell more shares than you own.")
-#        self.totalCost -= numberSold*price
-#        purchaseData = pd.DataFrame({SC.CODE: [self.stockCode],
-#                                     SC.DATE: [date],
-#                                     SC.NUMBER_PURCHASED: [-numberSold],
-#                                     SC.PRICE: [price],
-#                                     SC.COST: [-price*numberSold]})
-#        self.database.addToDatabase(purchaseData, SC.TABLE_NAME)
-#    
-# ################### to update ##############################        
-#    # Update a data input, in case of input error. 
-#    # numberBought is a negative number if its a sale we wish to reverse
-#    def remove(self, numberBought, price, date):
-#        self.numberOwned -= numberBought
-#        self.totalCost -= numberBought*price
-#        sqlCommand = '''DELETE FROM {} 
-#            WHERE {} LIKE '{}'
-#            AND {} == {}
-#            AND {} == {}
-#            AND {} == date("{}")''' \
-#            .format(SC.TABLE_NAME, 
-#                    SC.CODE, self.stockCode,
-#                    SC.NUMBER_PURCHASED, numberBought,
-#                    SC.PRICE, price,
-#                    SC.DATE, date)
-#        rowsRemoved = self.database.executeCommand(sqlCommand)
-#        
-#        # Check whether the data removal was succesful. If not, user most likely
-#        # made an input error, so throw a ValueError so they know about it.
-#        if rowsRemoved == 0:
-#            self.numberOwned += numberBought
-#            self.totalCost += numberBought*price
-#            raise ValueError("Purchase of {} shares for ${} on {} was not in database".format(numberBought, price, date))
-
+    # Buy a number of stocks at a price and save in the database
+    def buy(self, quantity_bought, instrument_sold, quantity_sold, commission, date = DEFAULT_DATE):
+        self.numberOwned += quantity_bought
+        #self.totalCost += quantity_bought*price  # to update
+        purchaseData = pd.DataFrame({self.database.DATE: [date],
+                                     self.database.INSTRUMENT_BOUGHT: [self.stockCode],
+                                     self.database.QUANTITY_BOUGHT: [quantity_bought],
+                                     self.database.INSTRUMENT_SOLD: [instrument_sold],
+                                     self.database.QUANTITY_SOLD: quantity_sold,
+                                     self.database.COMMISSION: [commission]})
+        self.database.addToDatabase(purchaseData, self.database.TRANSACTIONS_TABLE_NAME)
+    
+    # Sell a number of stocks at a price and save in the database     
+    def sell(self, quantity_bought, instrument_bought, quantity_sold, commission, date = DEFAULT_DATE):
+        self.numberOwned -= quantity_sold
+        #self.totalCost += quantity_bought*price  # to update
+        purchaseData = pd.DataFrame({self.database.DATE: [date],
+                                     self.database.INSTRUMENT_BOUGHT: [instrument_bought],
+                                     self.database.QUANTITY_BOUGHT: [quantity_bought],
+                                     self.database.INSTRUMENT_SOLD: [self.stockCode],
+                                     self.database.QUANTITY_SOLD: quantity_sold,
+                                     self.database.COMMISSION: [commission]})
+        self.database.addToDatabase(purchaseData, self.database.TRANSACTIONS_TABLE_NAME)
     
     # Adds a dividend payment to the dividend database table
     def addDividend(self, payment, date = DEFAULT_DATE):
         self.totalDividend += payment
-        dividendData = pd.DataFrame({SC.IB_TICKER: [self.stockCode],
-                                     SC.DIVIDEND_DATE: [date],
-                                     SC.DIVIDEND_AMOUNT: [payment]})
-        self.database.addToDatabase(dividendData, SC.DIVIDEND_TABLE_NAME)        
+        dividendData = pd.DataFrame({self.database.DIVIDEND_DATE: [date],
+                                     self.database.IB_TICKER: [self.stockCode],
+                                     self.database.DIVIDEND_AMOUNT: [payment]})
+        self.database.addToDatabase(dividendData, self.database.DIVIDEND_TABLE_NAME)        
     
     # Removes a divident payment from the dividend database table
     def removeDividend(self, payment, date):
@@ -184,152 +153,111 @@ class Stock:
             WHERE {} LIKE '{}'
             AND {} == {}
             AND {} == date("{}")''' \
-            .format(SC.DIVIDEND_TABLE_NAME, 
-                    SC.IB_TICKER, self.stockCode,
-                    SC.DIVIDEND_AMOUNT, payment,
-                    SC.DIVIDEND_DATE, date)
+            .format(self.database.DIVIDEND_TABLE_NAME, 
+                    self.database.IB_TICKER, self.stockCode,
+                    self.database.DIVIDEND_AMOUNT, payment,
+                    self.database.DIVIDEND_DATE, date)
         rowsRemoved = self.database.executeCommand(sqlCommand)
         
         # Check whether the data removal was succesful. If not, user most likely
         # made an input error, so throw a ValueError so they know about it.
         if rowsRemoved == 0:
             self.totalDividend += payment
-            raise ValueError("Dividend payment of ${} was not in database".format(payment, date))
+            raise ValueError("Dividend payment of ${} was not in database. Module: removeDividend.".format(payment, date))
     
     # Get the number of the stock owned at date. Default date is today.
     def getOwned(self, date = DEFAULT_DATE):
-        SC.TOTAL_OWNED = self.getBought(date) - self.getSold(date)
-        return SC.TOTAL_OWNED
+        self.database.TOTAL_OWNED = self.getBought(date) - self.getSold(date)
+        return self.database.TOTAL_OWNED
         
     # Get the number of the stock sold at date. Default date is today.
     def getSold(self, date = DEFAULT_DATE):
-        sqlQuery = '''SELECT SUM({}) AS {} FROM {} 
-            WHERE {} LIKE '{}' 
-            AND {} <= date("{}")''' \
-            .format(SC.QUANTITY_SOLD, SC.TOTAL_SOLD, SC.TRANSACTIONS_TABLE_NAME, 
-                    SC.INSTRUMENT_SOLD, self.stockCode, 
-                    SC.DATE, date)
-        data = self.database.readDatabase(sqlQuery)
-     
+        data  = self.database.getTransactions([self.stockCode], startDate = DEFAULT_STARTDATE, endDate = date)
         # If data is empty return 0
-        if data.empty or data.at[0,SC.TOTAL_SOLD] is None:
+        if data.empty:
             print('No data for dates up to {}. Method: Stock.getSold.'.format(date))
             return 0
-        return data.at[0, SC.TOTAL_SOLD]
+        return sum(data[self.database.QUANTITY_SOLD])
 
    # Get the number of the bought sold at date. Default date is today.
     def getBought(self, date = DEFAULT_DATE):
-        sqlQuery = '''SELECT SUM({}) AS {} FROM {} 
-            WHERE {} LIKE '{}' 
-            AND {} <= date("{}")''' \
-            .format(SC.QUANTITY_BOUGHT, SC.TOTAL_BOUGHT, SC.TRANSACTIONS_TABLE_NAME, 
-                    SC.INSTRUMENT_BOUGHT, self.stockCode, 
-                    SC.DATE, date)
-        data = self.database.readDatabase(sqlQuery)
+        data  = self.database.getTransactions([self.stockCode], startDate = DEFAULT_STARTDATE, endDate = date)
         # If data is empty return 0
-        if data.empty or data.at[0,SC.TOTAL_BOUGHT] is None:
+        if data.empty:
             print('No data for dates up to {}. Method: Stock.getBought.'.format(date))
             return 0
-        return data.at[0, SC.TOTAL_BOUGHT]
+        return data.at[0, self.database.QUANTITY_BOUGHT]
                
     # Get the total spent as price paid + commissions
     def getSpent(self, date = DEFAULT_DATE):
         return self.getPricePaid(date) * self.getCommissions(date)
     
-    # Get the total price paid in Euros for a stock. Default date is today.
+     # Get the total price paid in Euros for a stock. Default date is today.
     def getPricePaid(self, date = DEFAULT_DATE):
-        sqlQuery = '''
-        WITH PRICETRANSJOIN AS (
-        	SELECT TRANS.TRANSACTION_ID, TRANS.INSTRUMENT_BOUGHT, datetime(TRANS.DATE) AS DATE, TRANS.INSTRUMENT_SOLD, TRANS.QUANTITY_SOLD, 
-        			ABS(JULIANDAY(datetime(TRANS.DATE))- JULIANDAY(datetime(PRICES.DATE))) AS DATEDIFF, PRICES.IB_TICKER, PRICES.PRICE,
-        			ROW_NUMBER() OVER(PARTITION BY TRANS.TRANSACTION_ID 
-        								 ORDER BY ABS(JULIANDAY(datetime(TRANS.DATE))- JULIANDAY(datetime(PRICES.DATE)))) AS rk
-        	FROM FACT_TRANSACTIONS AS TRANS LEFT JOIN FACT_HISTPRICES AS PRICES
-        		ON TRANS.INSTRUMENT_SOLD = PRICES.IB_TICKER AND 
-        			(datetime(TRANS.DATE) = datetime(PRICES.DATE) OR 
-        			 datetime(TRANS.DATE, '+1 day') = datetime(PRICES.DATE) OR 
-        			 datetime(TRANS.DATE, '+1 day') = datetime(PRICES.DATE))
-        	WHERE TRANS.INSTRUMENT_BOUGHT = '{}'
-        	ORDER BY TRANS.TRANSACTION_ID, DATEDIFF
-        	), COSTS as ( 
-        	SELECT PRICETRANSJOIN.DATE,
-        		   CASE WHEN PRICETRANSJOIN.INSTRUMENT_SOLD = "EUR" THEN QUANTITY_SOLD 
-        				ELSE (PRICETRANSJOIN.QUANTITY_SOLD*PRICETRANSJOIN.PRICE) 
-        			END AS COST 
-        	FROM PRICETRANSJOIN WHERE PRICETRANSJOIN.rk = 1 AND PRICETRANSJOIN.DATE <= '{}'
-        	)
-        SELECT SUM(COSTS.COST) AS TOT_COST_EUR FROM COSTS; 
-        ''' \
-            .format(self.stockCode, date)
-        data = self.database.readDatabase(sqlQuery)
-        # If data is empty return 0
-        if data.empty or data.at[0, "TOT_COST_EUR"] is None:
-            print('No data for dates up to {}. Method: Stock.getPricePaid.'.format(date))
-            return 0
-        return data.at[0, "TOT_COST_EUR"]
-    
+        cost  = self.database.getTransactions([self.stockCode], startDate = DEFAULT_STARTDATE, endDate = date)
+        cost = cost.sort_values(by=['DATE', 'INSTRUMENT_SOLD'], ascending = True)
+        cost['DATE'] = pd.to_datetime(cost['DATE'], infer_datetime_format=True)
+        
+        tickers_list = cost['INSTRUMENT_SOLD'].drop_duplicates().values.tolist()
+        
+        price = self.database.getPrices(tickers_list, startDate = DEFAULT_STARTDATE, endDate = date)
+        price = price.sort_values(by=['DATE', 'IB_TICKER'], ascending = True)
+        price.columns = ['DATE', 'INSTRUMENT_SOLD', 'PRICE_INSTRUMENT_SOLD']
+        
+        currencies = self.getCurrency(tickers_list)
+        currencies['INSTRUMENT_SOLD'] = tickers_list
+        
+        price_curr = pd.merge(price, currencies, how = 'left', on = 'INSTRUMENT_SOLD') 
+        
+        # Transform DATE to datetime and merge the commission date to the previous available date 
+        price_curr['DATE'] = pd.to_datetime(price_curr['DATE'], infer_datetime_format=True)
+        
+        tickers_list = price_curr['YAHOO_CURRENCY'].drop_duplicates().values.tolist()
+        priceYAHOOCURR = self.database.getPrices(tickers_list, startDate = DEFAULT_STARTDATE, endDate = date)
+        priceYAHOOCURR['DATE'] = pd.to_datetime(priceYAHOOCURR['DATE'], infer_datetime_format=True)
+        priceYAHOOCURR = priceYAHOOCURR.sort_values(by=['DATE', 'IB_TICKER'], ascending = True)
+        priceYAHOOCURR.columns = ['DATE', 'YAHOO_CURRENCY', 'PRICE_YAHOO_CURRENCY']
+        price_curr2 = pd.merge_asof(price_curr, priceYAHOOCURR, on='DATE', by='YAHOO_CURRENCY')
+        
+        cost_price_curr2 = pd.merge_asof(cost, price_curr2, on='DATE', by='INSTRUMENT_SOLD')
+        cost_price_curr2['PRICEPAID_EUR'] =  cost_price_curr2['QUANTITY_SOLD'] *  cost_price_curr2['PRICE_INSTRUMENT_SOLD'] * cost_price_curr2['PRICE_YAHOO_CURRENCY']
+        return sum(cost_price_curr2['PRICEPAID_EUR'])
+              
     # Get the total commissions paid in Euros for a stock. Default date is today.
     def getCommissions(self, date = DEFAULT_DATE):
-        sqlQuery = '''
-        WITH PRICETRANSJOIN AS (
-        	SELECT TRANS.TRANSACTION_ID, TRANS.INSTRUMENT_BOUGHT, datetime(TRANS.DATE) AS DATE, TRANS.COMMISSION, 
-        			ABS(JULIANDAY(datetime(TRANS.DATE))- JULIANDAY(datetime(PRICES.DATE))) AS DATEDIFF, PRICES.IB_TICKER, PRICES.PRICE,
-        			ROW_NUMBER() OVER(PARTITION BY TRANS.TRANSACTION_ID 
-        								 ORDER BY ABS(JULIANDAY(datetime(TRANS.DATE))- JULIANDAY(datetime(PRICES.DATE)))) AS rk
-        	FROM FACT_TRANSACTIONS AS TRANS LEFT JOIN FACT_HISTPRICES AS PRICES
-        		ON 	(datetime(TRANS.DATE) = datetime(PRICES.DATE) OR 
-        			 datetime(TRANS.DATE, '+1 day') = datetime(PRICES.DATE) OR 
-        			 datetime(TRANS.DATE, '+1 day') = datetime(PRICES.DATE))
-        	WHERE PRICES.IB_TICKER = 'CHF' AND TRANS.INSTRUMENT_BOUGHT = '{}'
-        	ORDER BY TRANS.TRANSACTION_ID, DATEDIFF
-        	), COMMISSIONS as ( 
-        	SELECT PRICETRANSJOIN.DATE, PRICETRANSJOIN.PRICE * PRICETRANSJOIN.COMMISSION AS COMMISSION_EUR 
-        	FROM PRICETRANSJOIN WHERE PRICETRANSJOIN.rk = 1 AND PRICETRANSJOIN.DATE <= '{}'
-        	)
-        SELECT SUM(COMMISSIONS.COMMISSION_EUR) AS TOT_COMMISSIONS_EUR FROM COMMISSIONS;     
-        ''' \
-            .format(self.stockCode, date)
-        data = self.database.readDatabase(sqlQuery)
-        # If data is empty return 0
-        if data.empty or data.at[0, "TOT_COMMISSIONS_EUR"] is None:
-            print('No data for dates up to {}. Method: Stock.getCommissions.'.format(date))
-            return 0
-        return data.at[0, "TOT_COMMISSIONS_EUR"]
-    
-    def getCommissions2(self, date = DEFAULT_DATE):
-        sqlQuery = '''
-           	SELECT TRANSACTION_ID, datetime(DATE) AS DATE, COMMISSION
-        	FROM FACT_TRANSACTIONS 
-        	WHERE INSTRUMENT_BOUGHT = '{}' and datetime(DATE) <= '{}'
-        	ORDER BY TRANSACTION_ID;     
-        ''' \
-            .format(self.stockCode, date)
-        commissionsCHF = self.database.readDatabase(sqlQuery) 
-        CHFEUR = self.getCHFEURRange(startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE)
-        commissionsCHF_L_CHFEUF = pd.merge_asof(commissionsCHF, CHFEUR, on='DATE')
+        commissionsCHF  = self.database.getTransactions([self.stockCode], startDate = DEFAULT_STARTDATE, endDate = date)
+        commissionsCHF = commissionsCHF.sort_values(by=['DATE'], ascending = True)
+        
+        # Get the CHFEUR rates to convert the commissions to EUR              
+        CHFEUR = self.database.getPrices("CHF", startDate = DEFAULT_STARTDATE, endDate = date)
+        CHFEUR = CHFEUR.sort_values(by=['DATE'], ascending = True)
 
-        
-        
+        # Transform DATE to datetime and merge the commission date to the previous available date 
+        commissionsCHF['DATE'] = pd.to_datetime(commissionsCHF['DATE'], infer_datetime_format=True)
+        CHFEUR['DATE'] = pd.to_datetime(CHFEUR['DATE'], infer_datetime_format=True)
+               
+        commissionsCHF_L_CHFEUR = pd.merge_asof(commissionsCHF, CHFEUR, on='DATE')
+        commissionsCHF_L_CHFEUR['COMMISSION_EUR'] = commissionsCHF_L_CHFEUR['COMMISSION'] * commissionsCHF_L_CHFEUR['PRICE']
         
         # If data is empty return 0
-        if data.empty or data.at[0, "TOT_COMMISSIONS_EUR"] is None:
-            print('No data for dates up to {}. Method: Stock.getCommissions.'.format(date))
+        if commissionsCHF_L_CHFEUR.empty:
+            print('No commissions for dates up to {}. Method: Stock.getCommissions2.'.format(date))
             return 0
-        return data.at[0, "TOT_COMMISSIONS_EUR"]
+        return sum(commissionsCHF_L_CHFEUR['COMMISSION_EUR'])
 
     # Get the price of the stock at date. Default date is today.
     def getPrice(self, date = DEFAULT_DATE):
         sqlQuery = ''' SELECT {} FROM {}
             WHERE {} LIKE '{}'
             AND {} LIKE '{}' ''' \
-            .format(SC.PRICE, SC.HISTORICAL_TABLE_NAME, 
-                    SC.IB_TICKER, self.stockCode, 
-                    SC.DATE, date)
+            .format(self.database.PRICE, self.database.HISTORICAL_TABLE_NAME, 
+                    self.database.IB_TICKER, self.stockCode, 
+                    self.database.DATE, date)
         data = self.database.readDatabase(sqlQuery)
         # If data is empty raise ValueError
-        if data.empty or data.at[0, SC.PRICE] is None:
+        if data.empty:
             raise ValueError(('No price data for {}. Method: Stock.getPrice.'.format(date)))
-        return data.at[0, SC.PRICE]
+        return data.at[0, self.database.PRICE]
 
     # get the total value of the stock at date. Default date is today.
     def getValue(self, date = DEFAULT_DATE):
@@ -340,27 +268,33 @@ class Stock:
         sqlQuery = ''' SELECT SUM({}) AS {} FROM {}
             WHERE {} LIKE '{}'
             AND {} <= date("{}") ''' \
-            .format(SC.DIVIDEND_AMOUNT, SC.DIVIDEND_TOTAL, SC.DIVIDEND_TABLE_NAME,
-                    SC.IB_TICKER, self.stockCode,
-                    SC.DIVIDEND_DATE, date)
+            .format(self.database.DIVIDEND_AMOUNT, self.database.DIVIDEND_TOTAL, self.database.DIVIDEND_TABLE_NAME,
+                    self.database.IB_TICKER, self.stockCode,
+                    self.database.DIVIDEND_DATE, date)
         data = self.database.readDatabase(sqlQuery)
         # If data is empty return 0
-        if data.empty or data.at[0, SC.DIVIDEND_TOTAL] is None:
+        if data.empty:
             print(('No dividend data for {}. Method: Stock.getDividend.'.format(date)))
             return 0
-        return data.at[0, SC.DIVIDEND_TOTAL]
+        return data.at[0, self.database.DIVIDEND_TOTAL]
 
     # Get the currency (YAHOO_CURRENCY) of the stock.
-    def getCurrency(self):
-        sqlQuery = ''' SELECT {} FROM {} WHERE {} = '{}' ''' \
-            .format(SC.YAHOO_CURRENCY, SC.STOCKS_TABLE_NAME,
-                    SC.IB_TICKER, self.stockCode)
+    def getCurrency(self, tickers):
+        tickers_str = ""
+        for ticker in tickers[:-1]:
+            tickers_str = tickers_str + '"' + ticker + '", '
+            
+        tickers_str = tickers_str + '"' + tickers[-1] + '"'
+        
+        sqlQuery = ''' SELECT {} FROM {} WHERE {} in ({})''' \
+            .format(self.database.YAHOO_CURRENCY, self.database.STOCKS_TABLE_NAME,
+                    self.database.IB_TICKER, tickers_str)
         data = self.database.readDatabase(sqlQuery)
         # If data is empty return 0
-        if data.empty or data.at[0, SC.YAHOO_CURRENCY] is None:
-            print(('No currency for {}. Method: Stock.getCurrency.'.format(IB_TICKER)))
+        if data.empty:
+            print(('No currency for {}. Method: Stock.getCurrency.'.format(tickers_str)))
             return 0
-        return data.at[0, SC.YAHOO_CURRENCY]      
+        return data
        
 #################### to update ##############################
     # Get a data frame containing the price of the stock over a range of dates    
@@ -369,33 +303,15 @@ class Stock:
             WHERE {} LIKE '{}'
             AND {} BETWEEN date("{}") AND date("{}") 
             ORDER BY {} ASC''' \
-            .format(SC.DATE, SC.PRICE, SC.HISTORICAL_TABLE_NAME, 
-                    SC.IB_TICKER, self.stockCode, 
-                    SC.DATE, startDate, endDate,
-                    SC.DATE)
+            .format(self.database.DATE, self.database.PRICE, self.database.HISTORICAL_TABLE_NAME, 
+                    self.database.IB_TICKER, self.stockCode, 
+                    self.database.DATE, startDate, endDate,
+                    self.database.DATE)
         data = self.database.readDatabase(sqlQuery)
         # If data is empty raise ValueError
         if data.empty:
             raise ValueError(('No price data in the range {} - {}. Method: Stock.getPriceRange'.format(startDate, endDate)))
         return data
-    
-        # Get a data frame containing the price of the stock over a range of dates    
-    def getCHFEURRange(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
-        sqlQuery = ''' SELECT {}, {} FROM {}
-            WHERE {} LIKE '{}'
-            AND {} BETWEEN date("{}") AND date("{}") 
-            ORDER BY {} ASC''' \
-            .format(SC.DATE, SC.PRICE, SC.HISTORICAL_TABLE_NAME, 
-                    SC.IB_TICKER, "CHF", 
-                    SC.DATE, startDate, endDate,
-                    SC.DATE)
-        data = self.database.readDatabase(sqlQuery)
-        # If data is empty raise ValueError
-        if data.empty:
-            raise ValueError(('No price data in the range {} - {}. Method: Stock.getCHFEUR'.format(startDate, endDate)))
-        return data
-    
-    
     
 #        
 #    
@@ -409,19 +325,19 @@ class Stock:
 #            WHERE {}.{} LIKE '{}' 
 #            AND {} BETWEEN date("{}") AND date("{}")
 #            GROUP BY {} ORDER BY {} ASC''' \
-#            .format(SC.HISTORICAL_TABLE_NAME, SC.DATE, 
-#                    SC.TABLE_NAME, SC.NUMBER_PURCHASED, SC.TOTAL_OWNED, 
-#                    SC.TABLE_NAME, SC.DATE, SC.DATE,
-#                    SC.HISTORICAL_TABLE_NAME, 
-#                    SC.TABLE_NAME, SC.HISTORICAL_TABLE_NAME, SC.DATE, SC.TABLE_NAME, SC.DATE,
-#                    SC.HISTORICAL_TABLE_NAME, SC.IB_TICKER, SC.TABLE_NAME, SC.CODE,
-#                    SC.HISTORICAL_TABLE_NAME, SC.IB_TICKER, self.stockCode,
-#                    SC.DATE, startDate, endDate,
-#                    SC.DATE, SC.DATE)
+#            .format(database.HISTORICAL_TABLE_NAME, database.DATE, 
+#                    database.TABLE_NAME, database.NUMBER_PURCHASED, database.TOTAL_OWNED, 
+#                    database.TABLE_NAME, database.DATE, database.DATE,
+#                    database.HISTORICAL_TABLE_NAME, 
+#                    database.TABLE_NAME, database.HISTORICAL_TABLE_NAME, database.DATE, database.TABLE_NAME, database.DATE,
+#                    database.HISTORICAL_TABLE_NAME, database.IB_TICKER, database.TABLE_NAME, database.CODE,
+#                    database.HISTORICAL_TABLE_NAME, database.IB_TICKER, self.stockCode,
+#                    database.DATE, startDate, endDate,
+#                    database.DATE, database.DATE)
 #
 #        data = self.database.readDatabase(sqlQuery)
 #        # Remove the unwanted Purchase_Date column
-#        data = data.drop(SC.DATE, 1)
+#        data = data.drop(database.DATE, 1)
 #        # For any dates before the first purchase, set the number owned to 0.
 #        data = data.fillna(0)
 #        return data
@@ -437,19 +353,19 @@ class Stock:
 #            WHERE {}.{} LIKE '{}' 
 #            AND {} BETWEEN date("{}") AND date("{}")
 #            GROUP BY {} ORDER BY {} ASC''' \
-#            .format(SC.HISTORICAL_TABLE_NAME, SC.DATE, 
-#                    SC.TABLE_NAME, SC.COST, SC.TOTAL_SPENT, 
-#                    SC.TABLE_NAME, SC.DATE, SC.DATE,
-#                    SC.HISTORICAL_TABLE_NAME, 
-#                    SC.TABLE_NAME, SC.HISTORICAL_TABLE_NAME, SC.DATE, SC.TABLE_NAME, SC.DATE,
-#                    SC.HISTORICAL_TABLE_NAME, SC.IB_TICKER, SC.TABLE_NAME, SC.CODE,
-#                    SC.HISTORICAL_TABLE_NAME, SC.IB_TICKER, self.stockCode,
-#                    SC.DATE, startDate, endDate,
-#                    SC.DATE, SC.DATE)
+#            .format(database.HISTORICAL_TABLE_NAME, database.DATE, 
+#                    database.TABLE_NAME, database.COST, database.TOTAL_SPENT, 
+#                    database.TABLE_NAME, database.DATE, database.DATE,
+#                    database.HISTORICAL_TABLE_NAME, 
+#                    database.TABLE_NAME, database.HISTORICAL_TABLE_NAME, database.DATE, database.TABLE_NAME, database.DATE,
+#                    database.HISTORICAL_TABLE_NAME, database.IB_TICKER, database.TABLE_NAME, database.CODE,
+#                    database.HISTORICAL_TABLE_NAME, database.IB_TICKER, self.stockCode,
+#                    database.DATE, startDate, endDate,
+#                    database.DATE, database.DATE)
 #
 #        data = self.database.readDatabase(sqlQuery)
 #        # Remove the unwanted Purchase_Date column
-#        data = data.drop(SC.DATE, 1)
+#        data = data.drop(database.DATE, 1)
 #        # For any dates before the first purchase, set the number owned to 0.
 #        data = data.fillna(0)
 #        return data
@@ -457,13 +373,13 @@ class Stock:
 #        
 #    # Get a dataframe containing the total value of the stock over a range of dates
 #    def getValueRange(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
-#        data = pd.merge(self.getPriceRange(startDate, endDate), self.getOwnedRange(startDate, endDate), on=SC.DATE)
+#        data = pd.merge(self.getPriceRange(startDate, endDate), self.getOwnedRange(startDate, endDate), on=database.DATE)
 #        # Add a column for the total value of the stock
-#        data['Total_Value'] = data[SC.PRICE] * data[SC.TOTAL_OWNED]
+#        data['Total_Value'] = data[database.PRICE] * data[database.TOTAL_OWNED]
 #        # For any dates before the first purchase, set the total value to 0.
 #        data = data.fillna(0)
 #        # Remove the price and number owned columns
-#        data = data.drop([SC.PRICE, SC.TOTAL_OWNED], 1)
+#        data = data.drop([database.PRICE, database.TOTAL_OWNED], 1)
 #        return data
 #        
 #
@@ -477,19 +393,19 @@ class Stock:
             WHERE {}.{} LIKE '{}' 
             AND {} BETWEEN date("{}") AND date("{}")
             GROUP BY {} ORDER BY {} ASC''' \
-            .format(SC.HISTORICAL_TABLE_NAME, SC.DATE, 
-                    SC.DIVIDEND_TABLE_NAME, SC.DIVIDEND_AMOUNT, SC.DIVIDEND_TOTAL, 
-                    SC.DIVIDEND_TABLE_NAME, SC.DIVIDEND_DATE, SC.DIVIDEND_DATE,
-                    SC.HISTORICAL_TABLE_NAME, 
-                    SC.DIVIDEND_TABLE_NAME, SC.HISTORICAL_TABLE_NAME, SC.DATE, SC.DIVIDEND_TABLE_NAME, SC.DIVIDEND_DATE,
-                    SC.HISTORICAL_TABLE_NAME, SC.IB_TICKER, SC.DIVIDEND_TABLE_NAME, SC.IB_TICKER,
-                    SC.HISTORICAL_TABLE_NAME, SC.IB_TICKER, self.stockCode,
-                    SC.DATE, startDate, endDate,
-                    SC.DATE, SC.DATE)
+            .format(database.HISTORICAL_TABLE_NAME, database.DATE, 
+                    database.DIVIDEND_TABLE_NAME, database.DIVIDEND_AMOUNT, database.DIVIDEND_TOTAL, 
+                    database.DIVIDEND_TABLE_NAME, database.DIVIDEND_DATE, database.DIVIDEND_DATE,
+                    database.HISTORICAL_TABLE_NAME, 
+                    database.DIVIDEND_TABLE_NAME, database.HISTORICAL_TABLE_NAME, database.DATE, database.DIVIDEND_TABLE_NAME, database.DIVIDEND_DATE,
+                    database.HISTORICAL_TABLE_NAME, database.IB_TICKER, database.DIVIDEND_TABLE_NAME, database.IB_TICKER,
+                    database.HISTORICAL_TABLE_NAME, database.IB_TICKER, self.stockCode,
+                    database.DATE, startDate, endDate,
+                    database.DATE, database.DATE)
 
         data = self.database.readDatabase(sqlQuery)
         # Remove the unwanted Purchase_Date column
-        data = data.drop(SC.DIVIDEND_DATE, 1)
+        data = data.drop(database.DIVIDEND_DATE, 1)
         # For any dates before the first purchase, set the number owned to 0.
         data = data.fillna(0)
         return data
@@ -498,13 +414,13 @@ class Stock:
 #    # Plot stock data in a range of dates
 #    def plot(self, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE):
 #        # Format data to be plotted
-#        date = self.getValueRange(startDate, endDate)[SC.DATE].tolist()
+#        date = self.getValueRange(startDate, endDate)[database.DATE].tolist()
 #        date = list(map(convertDate, date))
 #        value = self.getValueRange(startDate, endDate)["Total_Value"]
-#        owned = self.getOwnedRange(startDate, endDate)[SC.TOTAL_OWNED]
-#        price = self.getPriceRange(startDate, endDate)[SC.PRICE]
-#        spent = self.getSpentRange(startDate, endDate)[SC.TOTAL_SPENT]
-#        dividend = self.getDividendRange(startDate, endDate)[SC.DIVIDEND_TOTAL]
+#        owned = self.getOwnedRange(startDate, endDate)[database.TOTAL_OWNED]
+#        price = self.getPriceRange(startDate, endDate)[database.PRICE]
+#        spent = self.getSpentRange(startDate, endDate)[database.TOTAL_SPENT]
+#        dividend = self.getDividendRange(startDate, endDate)[database.DIVIDEND_TOTAL]
 #
 #        # Do plotting
 #        fig = plt.figure()

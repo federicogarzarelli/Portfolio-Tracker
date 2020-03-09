@@ -7,23 +7,42 @@ Created on Wed Mar  4 20:34:14 2020
 
 import pandas as pd
 from Database import Database
-import stockContract as SC
 import Stock as ST
-import stockDownloader as downloader
 import utils 
 import datetime
 
 databasePath = "MyPortfolio.db"
 
-database = Database(databasePath)
-
 stockCode = "EUR"
-
-SGLD = ST.Stock(stockCode, database)
-#SGLD.plot()
-
 
 DEFAULT_DATE = str(datetime.date.today())
 DEFAULT_STARTDATE = "1975-01-01"
-EUR.getCHFEURRange(startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE)
 
+
+MyPortfolioDB = PortfolioDB(databasePath)
+EUR = ST.Stock(stockCode, MyPortfolioDB)
+##SGLD.plot()
+#
+#
+#EUR.getCHFEURRange(startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE)
+
+
+
+
+# Test PortfolioDB
+
+#tickers = ["CHF", "EIMI", "IDJV"]
+#startDate = DEFAULT_STARTDATE
+#endDate = DEFAULT_DATE
+#
+#
+#
+#trans = MyPortfolioDB.getTransactions(tickers, startDate, endDate)
+#StockInfo = MyPortfolioDB.getStockInfo(tickers)
+#Prices = MyPortfolioDB.getPrices(tickers, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE)
+#Dividends = MyPortfolioDB.getDividends(tickers, startDate = DEFAULT_STARTDATE, endDate = DEFAULT_DATE)
+
+minDate = "1975-01-01"
+
+    
+     
