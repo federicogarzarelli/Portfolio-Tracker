@@ -12,7 +12,8 @@ import pandas as pd
 # querying the database.
 class Database():
     # Class initializer
-    def __init__(self, databasePath):
+    def __init__(self, databasePath, googledatatable):
+      self.googledatatable = googledatatable
       self.databasePath = databasePath
       conn = sqlite3.connect(self.databasePath)
       conn.close()

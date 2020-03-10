@@ -13,6 +13,7 @@ from datetime import datetime, timedelta, date
 import yfinance as yf # https://aroussi.com/post/python-yahoo-finance
 # pip install yfinance --upgrade --no-cache-dir
 from Database import Database
+import math
 
 ###############
 ## Constants ##
@@ -112,22 +113,24 @@ class PortfolioDB(Database):
     
     # Checks whether stock is in database, if not it stockScrape to get all the data.
     # If it is in data base it checks whether the stock information is up to date and only fetches new data
-    def updateStockData(self, stockCode):
+    # Source can be GOOGLEFINANCE or YAHOOFINANCE
+    
+    def updateStockData(self, stockCode, source = "GOOGLEFINANCE"):
         # Reads database
         sqlQuery = """SELECT {} FROM {} WHERE {} = '{}'; """ \
         .format(self.IB_TICKER, self.HISTORICAL_TABLE_NAME, self.IB_TICKER, stockCode)
         
-    #    print(sqlQuery)
+        #print(sqlQuery)
         stockData = self.readDatabase(sqlQuery)
                
         # Checks whether any previous data has been added for the particular stock code
         # if not then run initialStockScrape to get all past data
         if stockData.empty:
-            print('Running stockScrape() on {}. --First run.'.format(stockCode))
-            self.stockScrape(stockCode)
+            print('Running stockScrape() on {} using {}. --First run.'.format(stockCode, source))
+            self.stockScrape(stockCode, source)
         else:
             #access database to get latestDate
-            print('Running stockScrape() on {}. --Updating data.'.format(stockCode))
+            print('Running stockScrape() on {} using {}. --Updating data.'.format(stockCode, source))
             # Performs SQL query to get the latest stock data date in database
             sqlQuery = """SELECT {}, max({}) AS Date FROM {} WHERE {} = '{}' GROUP BY {}""" \
             .format(self.IB_TICKER, self.DATE, self.HISTORICAL_TABLE_NAME, self.IB_TICKER, stockCode, self.IB_TICKER)
@@ -137,9 +140,12 @@ class PortfolioDB(Database):
             # Increment date by 1 day
             minDate = utils.incrementDate(minDate)
             
-            if utils.convertDate(minDate) < datetime.today():
+            today = datetime.now()
+            today = today.replace(hour=0, minute=0, second=0, microsecond=0) # end date
+                        
+            if utils.convertDate(minDate) < today:
                 # Updates stock data
-                self.stockScrape(stockCode, minDate)
+                self.stockScrape(stockCode, source, minDate)
             else:
                 # Data are already up to date
                 print("Data for {} are already up to date. Module: updateStockData.".format(stockCode))            
@@ -155,9 +161,20 @@ class PortfolioDB(Database):
                 return 0
             return data.at[0, self.YAHOO_SYMBOL]
         
+    def getGoogleCode(self, stockCode):
+            sqlQuery = ''' SELECT {} FROM {} WHERE {} = '{}' ''' \
+                .format(self.GOOGLE_FINANCE_SYMBOL, self.STOCKS_TABLE_NAME,
+                        self.IB_TICKER, stockCode)
+            data = self.readDatabase(sqlQuery)
+            # If data is empty return 0
+            if data.empty:
+                print(('No Yahoo Symbol for {}. Module: getGoogleCode.'.format(stockCode)))
+                return 0
+            return data.at[0, self.GOOGLE_FINANCE_SYMBOL]
+        
     # function which does the first time initialization of the stock and 
     #downloads all past stock data, returns array of dates, and array of data
-    def stockScrape(self, stockCode, minDate = utils.DEFAULT_STARTDATE):
+    def stockScrape(self, stockCode, source = "GOOGLEFINANCE", minDate = utils.DEFAULT_STARTDATE):
         # Initialize pandas dataframe to hold stock data    
         stockDataFrame =  pd.DataFrame({self.DATE: [], self.IB_TICKER: [], self.PRICE: []});
 
@@ -173,21 +190,38 @@ class PortfolioDB(Database):
                 day = datetime.combine(day, datetime.min.time())
                 stockDataFrame.loc[i] = [day] + ['EUR'] + [1] 
         else:
-         
-            YahooCode = self.getYahooCode(stockCode)
-            stock = yf.Ticker(YahooCode)
-            
-            sdate = utils.convertDate(minDate)  # start date
-            dowloaded_data = stock.history(interval="1d", start = sdate)
-        
-            # Manipulate the output
-            Dates = dowloaded_data.index.to_frame()
-            Dates = Dates.reset_index(drop=True)
-            
-            Price = dowloaded_data['Close'].reset_index(drop=True)
+            if source == "YAHOOFINANCE":
+                YahooCode = self.getYahooCode(stockCode)
+                stock = yf.Ticker(YahooCode)
                 
-            Ticker = pd.DataFrame([stockCode] * len(dowloaded_data['Close']),columns=['Ticker'])
+                sdate = utils.convertDate(minDate)  # start date
+                dowloaded_data = stock.history(interval="1d", start = sdate)
             
+                # Manipulate the output
+                Dates = dowloaded_data.index.to_frame()
+
+                Dates = Dates.reset_index(drop=True)
+                Price = dowloaded_data['Close'].reset_index(drop=True)
+                Ticker = pd.DataFrame([stockCode] * len(dowloaded_data['Close']),columns=['Ticker'])
+                
+            if source == "GOOGLEFINANCE":
+                googleticker = self.getGoogleCode(stockCode)
+                data = self.googledatatable.copy()
+                
+                sdate = utils.convertDate(minDate)  # start date
+                edate = datetime.now()
+                edate = edate.replace(hour=0, minute=0, second=0, microsecond=0) # end date
+                
+                data.DATE = pd.to_datetime(data.DATE, format = '%d/%m/%Y')
+                dates_mask = ((data.DATE >= sdate) & (data.DATE <= edate))
+                data = data.loc[dates_mask, [self.DATE, googleticker]]
+                
+                data = data.dropna()
+                
+                Dates =  pd.DataFrame(data.DATE,columns=['DATE']).reset_index(drop=True)
+                Ticker = pd.DataFrame([stockCode] * len(data.DATE),columns=['Ticker'])
+                Price =  pd.DataFrame(data[googleticker],columns=[googleticker]).reset_index(drop=True)
+                
             stockDataFrame =  pd.concat([Dates, Ticker, Price], axis = 1)
         
         stockDataFrame.columns = self.HISTORICAL_COLUMNS
@@ -235,12 +269,13 @@ class PortfolioDB(Database):
     ICTAX_LINK = "ICTAX_LINK"
     FUND_DOMICILE = "FUND_DOMICILE"
     GOOGLE_FINANCE_SYMBOL = "GOOGLE_FINANCE_SYMBOL"
+    GOOGLE_FINANCE_CURRENCY = "GOOGLE_FINANCE_CURRENCY"
     YAHOO_SYMBOL = "YAHOO_SYMBOL"
     YAHOO_CURRENCY = "YAHOO_CURRENCY"
     
-    STOCKS_COLUMNS = [NAME, IB_TICKER, IB_EXCHANGE, IB_CURRENCY, ISIN, LINK_1, LINK_2, ICTAX_LINK, FUND_DOMICILE, GOOGLE_FINANCE_SYMBOL, YAHOO_SYMBOL, YAHOO_CURRENCY]
+    STOCKS_COLUMNS = [NAME, IB_TICKER, IB_EXCHANGE, IB_CURRENCY, ISIN, LINK_1, LINK_2, ICTAX_LINK, FUND_DOMICILE, GOOGLE_FINANCE_SYMBOL, GOOGLE_FINANCE_CURRENCY, YAHOO_SYMBOL, YAHOO_CURRENCY]
     
-    STOCKS_COLUMN_LIST = "{} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT".format( NAME, IB_TICKER, IB_EXCHANGE, IB_CURRENCY, ISIN, LINK_1, LINK_2, ICTAX_LINK, FUND_DOMICILE, GOOGLE_FINANCE_SYMBOL, YAHOO_SYMBOL, YAHOO_CURRENCY)
+    STOCKS_COLUMN_LIST = "{} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT, {} TEXT".format( NAME, IB_TICKER, IB_EXCHANGE, IB_CURRENCY, ISIN, LINK_1, LINK_2, ICTAX_LINK, FUND_DOMICILE, GOOGLE_FINANCE_SYMBOL, GOOGLE_FINANCE_CURRENCY, YAHOO_SYMBOL, YAHOO_CURRENCY)
     
     ## Historical prices table
     # Table Name

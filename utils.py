@@ -11,6 +11,8 @@ from datetime import date, timedelta, datetime
 DEFAULT_DATE = str(date.today())+ " 00:00:00"
 DEFAULT_STARTDATE = "2020-01-01 00:00:00" #"1975-01-01 00:00:00"
 
+datasource = "GOOGLEFINANCE"
+
 # Converts a date in "yyyy-mm-dd" format to a dateTime object
 def convertDate(dateString):
    return datetime.strptime(dateString, '%Y-%m-%d %H:%M:%S')

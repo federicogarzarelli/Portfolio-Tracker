@@ -88,12 +88,18 @@ class Stock:
     currency = ""
       
     # Class initializer
-    def __init__(self, stockCode, database):
+    def __init__(self, stockCode, database, datasource = "GOOGLEFINANCE"): # "YAHOOFINANCE"
       self.stockCode = stockCode
       self.database = database
+      
+      if datasource == "YAHOOFINANCE":
+          self.currencyfield = self.database.YAHOO_CURRENCY
+      elif datasource == "GOOGLEFINANCE":
+          self.currencyfield = self.database.GOOGLE_FINANCE_CURRENCY
+      
       # Updates the database with any price data that it does not have.
       try:
-          self.database.updateStockData(self.stockCode)
+          self.database.updateStockData(self.stockCode, utils.datasource)
       except urllib.request.URLError:
           print("{} data not updated. URL Error.".format(self.stockCode))
      
@@ -114,7 +120,7 @@ class Stock:
       if dividend != None:
           self.totalDividend = dividend
       currency = self.getCurrency([self.stockCode])
-      currency  = currency.loc[0,self.database.YAHOO_CURRENCY]
+      currency  = currency.loc[0,self.currencyfield]
       if currency != None:
           self.currency = currency
 
@@ -166,8 +172,8 @@ class Stock:
     # Get the number of the stock OWNED at date. Default date is today.
     def getOwned(self, date = utils.DEFAULT_DATE):
         OwnedRange = self.getOwnedRange(startDate = utils.DEFAULT_STARTDATE, endDate = date)
-        self.database.TOTAL_OWNED = OwnedRange.loc[OwnedRange[self.database.DATE]==date,"OWNED"]
-        return self.database.TOTAL_OWNED.values[0]
+        Owned_at_date = OwnedRange.loc[OwnedRange[self.database.DATE]==date,"OWNED"]
+        return Owned_at_date.values[0]
         
     # Get the number of the stock sold at date. Default date is today.
     def getSold(self, date = utils.DEFAULT_DATE):
@@ -211,6 +217,14 @@ class Stock:
             return 0
         return data.loc[data[self.database.DATE]==date,"COMMISSION_EUR_CUMSUM"].values[0]
 
+    # Get the profit & losses in EUR for a stock. Default date is today.
+    def Profits_Losses(self, date = utils.DEFAULT_DATE):
+        data = self.Profits_LossesRange(startDate  = utils.DEFAULT_STARTDATE, endDate = date)
+        if data.empty:
+            print('No profits and losses for dates up to {}. Method: Stock.Profits_Losses.'.format(date))
+            return 0
+        return data.loc[data[self.database.DATE]==date,"P_L"].values[0]
+
     # Get the price of the stock at date. Default date is today.
     def getPrice(self, date = utils.DEFAULT_DATE):
         data = self.getPriceRange(startDate = utils.DEFAULT_STARTDATE, endDate = date)
@@ -233,7 +247,7 @@ class Stock:
             return 0
         return data.loc[data[self.database.DIVIDEND_DATE]==date,"DIVIDEND_CUMSUM"].values[0]
 
-    # Get the currencies (YAHOO_CURRENCY) of a list of stocks
+    # Get the currencies (YAHOO_CURRENCY or GOOGLE_FINANCE_CURRENCY) of a list of stocks
     def getCurrency(self, tickers):
         tickers_str = ""
         for ticker in tickers[:-1]:
@@ -246,7 +260,7 @@ class Stock:
         if data.empty:
             print(('No currency for {}. Method: Stock.getCurrency.'.format(tickers_str)))
             return 0
-        return data[[self.database.YAHOO_CURRENCY]]
+        return data[[self.currencyfield]]
     
     
     ################ Range functions ###########################
@@ -257,8 +271,16 @@ class Stock:
         value = self.getValueRange(startDate, endDate)
         
         Dates = pd.DataFrame(pd.date_range(startDate, endDate), columns = [self.database.DATE])
+        dates_spent = pd.merge(Dates, spent, how = "left", on = self.database.DATE)
+        dates_spent_value = pd.merge(dates_spent, value, how = "left", on = self.database.DATE)
+        dates_spent_value["P_L"] = dates_spent_value["VALUE_EUR"] - dates_spent_value["SPENT_EUR_CUMSUM"]
+        data = dates_spent_value[[self.database.DATE,"P_L"]]
+                
+        # If data is empty raise ValueError
+        if data.empty:
+            raise ValueError(('No profit & loss data in the range {} - {}. Method: Stock.Profits_LossesRange'.format(startDate, endDate)))
+        return data
         
-    
     # Get a data frame containing the price of the stock over a range of dates    
     def getPriceRange(self, startDate = utils.DEFAULT_STARTDATE, endDate = utils.DEFAULT_DATE):
         tickers = [self.stockCode]
@@ -337,20 +359,20 @@ class Stock:
         price_curr = pd.merge(price, currencies, how = 'left', on = 'INSTRUMENT_SOLD') 
         
         # Get the CCYEUR rates       
-        tickers_list = price_curr['YAHOO_CURRENCY'].drop_duplicates().values.tolist() # list of currencies of the instruments sold
-        priceYAHOOCURR = self.database.getPrices(tickers_list, startDate, endDate) 
-        priceYAHOOCURR[self.database.DATE] = pd.to_datetime(priceYAHOOCURR[self.database.DATE], format = '%Y-%m-%d %H:%M:%S')
-        priceYAHOOCURR = priceYAHOOCURR.sort_values(by=['DATE', 'IB_TICKER'], ascending = True)
-        priceYAHOOCURR.columns = ['DATE', 'YAHOO_CURRENCY', 'PRICE_YAHOO_CURRENCY']
+        tickers_list = price_curr[self.currencyfield].drop_duplicates().values.tolist() # list of currencies of the instruments sold
+        priceDATACURR = self.database.getPrices(tickers_list, startDate, endDate) 
+        priceDATACURR[self.database.DATE] = pd.to_datetime(priceDATACURR[self.database.DATE], format = '%Y-%m-%d %H:%M:%S')
+        priceDATACURR = priceDATACURR.sort_values(by=['DATE', 'IB_TICKER'], ascending = True)
+        priceDATACURR.columns = ['DATE', self.currencyfield, 'PRICE_DATA_CURRENCY']
         
         # Assign the CCYEUR rates to the price table
-        price_curr2 = pd.merge_asof(price_curr, priceYAHOOCURR, on='DATE', by='YAHOO_CURRENCY')
+        price_curr2 = pd.merge_asof(price_curr, priceDATACURR, on='DATE', by=self.currencyfield)
         
         # Assign the cost in EUR of the instruments sold to the transaction table
         cost_price_curr2 = pd.merge_asof(cost, price_curr2, on='DATE', by='INSTRUMENT_SOLD')
         
         # Calculate the price in EUR per transaction and add the cumulative sum
-        cost_price_curr2['PRICEPAID_EUR'] =  cost_price_curr2['QUANTITY_SOLD'] *  cost_price_curr2['PRICE_INSTRUMENT_SOLD'] * cost_price_curr2['PRICE_YAHOO_CURRENCY']
+        cost_price_curr2['PRICEPAID_EUR'] =  cost_price_curr2['QUANTITY_SOLD'] *  cost_price_curr2['PRICE_INSTRUMENT_SOLD'] * cost_price_curr2['PRICE_DATA_CURRENCY']
 
         
         # Now create a series of dates and join to it
@@ -427,21 +449,21 @@ class Stock:
         # Convert to EUR
         # 1. Get the currency of the stock and the corresponding CCYEUR rate
         currencies = self.getCurrency([self.stockCode])
-        currency_list = currencies[self.database.YAHOO_CURRENCY].tolist()
+        currency_list = currencies[self.currencyfield].tolist()
         # 2. Get the exchange rate
-        priceYAHOOCURR = self.database.getPrices(currency_list, startDate, endDate)
-        priceYAHOOCURR[self.database.DATE] = pd.to_datetime(priceYAHOOCURR[self.database.DATE], format = '%Y-%m-%d %H:%M:%S')
-        priceYAHOOCURR = priceYAHOOCURR.sort_values(by=['DATE', 'IB_TICKER'], ascending = True)
-        priceYAHOOCURR.columns = ['DATE', 'YAHOO_CURRENCY', 'PRICE_YAHOO_CURRENCY']
+        priceDATACURR = self.database.getPrices(currency_list, startDate, endDate)
+        priceDATACURR[self.database.DATE] = pd.to_datetime(priceDATACURR[self.database.DATE], format = '%Y-%m-%d %H:%M:%S')
+        priceDATACURR = priceDATACURR.sort_values(by=['DATE', 'IB_TICKER'], ascending = True)
+        priceDATACURR.columns = ['DATE', self.currencyfield, 'PRICE_DATA_CURRENCY']
         # 3. Merge the exchange rate to the price on the closest (earlier) date
-        data = pd.merge_asof(price_OWNED, priceYAHOOCURR, on='DATE', by='YAHOO_CURRENCY')
+        data = pd.merge_asof(price_OWNED, priceDATACURR, on='DATE')
         # 4. Calculate the value of the position in EUR
-        data['VALUE_EUR'] =  data['Total_Value'] * data['PRICE_YAHOO_CURRENCY']
+        data['VALUE_EUR'] =  data['Total_Value'] * data['PRICE_DATA_CURRENCY']
         
         # For any dates before the first purchase, set the total value to 0.
         data = data.fillna(0)
         # Remove the price and number OWNED columns
-        data = data.drop([self.database.PRICE, self.database.TOTAL_OWNED], 1)
+        data = data[[self.database.DATE,'VALUE_EUR']]
         
         if data.empty:
             print('No data for dates up to {}. Method: Stock.getValueRange.'.format(endDate))

@@ -11,33 +11,37 @@ from PortfolioDB import PortfolioDB
 from stock import Stock
 import utils 
 from datetime import datetime, date
+from GoogleSheetData import getGoogleSheetData
+import GoogleSheetData 
 
 databasePath = "MyPortfolio.db"
 
 DEFAULT_DATE = str(date.today())+ " 00:00:00"
 DEFAULT_STARTDATE = "2020-01-01 00:00:00" #"1975-01-01 00:00:00"
 
+#googledatatable = getGoogleSheetData(GoogleSheetData.SAMPLE_SPREADSHEET_ID, GoogleSheetData.SAMPLE_RANGE_NAME)
+googledatatable = pd.read_csv(r"C:\Users\fega\Desktop\googledatatable.csv")
+MyPortfolioDB = PortfolioDB(databasePath, googledatatable)
 
-MyPortfolioDB = PortfolioDB(databasePath)
-
-EUR = Stock("EUR", MyPortfolioDB)
 CHF = Stock("CHF", MyPortfolioDB)
 USD = Stock("USD", MyPortfolioDB)
+EUR = Stock("EUR", MyPortfolioDB)
 EIMI = Stock("EIMI", MyPortfolioDB)
 
-print(EIMI.stockCode)
-print(EIMI.numberOwned)
-print(EIMI.amountSpent)
-print(EIMI.totalDividend)
-print(EIMI.currency)
+print(EUR.stockCode)
+print(EUR.numberOwned)
+print(EUR.amountSpent)
+print(EUR.totalDividend)
+print(EUR.currency)
 
-EIMI.update()
+EUR.update()
 
-print(EIMI.stockCode)
-print(EIMI.numberOwned)
-print(EIMI.amountSpent)
-print(EIMI.totalDividend)
-print(EIMI.currency)
+print(EUR.stockCode)
+print(EUR.numberOwned)
+print(EUR.amountSpent)
+print(EUR.totalDividend)
+print(EUR.currency)
 
-EIMI.Profits_LossesRange(DEFAULT_STARTDATE, DEFAULT_DATE)
-     
+EUR.Profits_LossesRange(DEFAULT_STARTDATE, DEFAULT_DATE)
+CHF.Profits_LossesRange(DEFAULT_STARTDATE, DEFAULT_DATE)  
+USD.Profits_LossesRange(DEFAULT_STARTDATE, DEFAULT_DATE)  
