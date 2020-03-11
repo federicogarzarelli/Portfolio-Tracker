@@ -217,7 +217,8 @@ class PortfolioDB(Database):
                 data = data.loc[dates_mask, [self.DATE, googleticker]]
                 
                 data = data.dropna()
-                
+                data = data[(data[googleticker] != 'NA')]
+                                
                 Dates =  pd.DataFrame(data.DATE,columns=['DATE']).reset_index(drop=True)
                 Ticker = pd.DataFrame([stockCode] * len(data.DATE),columns=['Ticker'])
                 Price =  pd.DataFrame(data[googleticker],columns=[googleticker]).reset_index(drop=True)

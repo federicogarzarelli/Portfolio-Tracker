@@ -20,7 +20,8 @@ DEFAULT_DATE = str(date.today())+ " 00:00:00"
 DEFAULT_STARTDATE = "2020-01-01 00:00:00" #"1975-01-01 00:00:00"
 
 #googledatatable = getGoogleSheetData(GoogleSheetData.SAMPLE_SPREADSHEET_ID, GoogleSheetData.SAMPLE_RANGE_NAME)
-googledatatable = pd.read_csv(r"C:\Users\fega\Desktop\googledatatable.csv")
+#googledatatable.to_csv("C:/Users/feder/Google Drive/Work/Portfolio Tracker/Code Repo/googledata.csv", header = True, index = False)
+googledatatable = pd.read_csv("C:/Users/feder/Google Drive/Work/Portfolio Tracker/Code Repo/googledata.csv")
 MyPortfolioDB = PortfolioDB(databasePath, googledatatable)
 
 CHF = Stock("CHF", MyPortfolioDB)
@@ -42,6 +43,6 @@ print(EUR.amountSpent)
 print(EUR.totalDividend)
 print(EUR.currency)
 
-EUR.Profits_LossesRange(DEFAULT_STARTDATE, DEFAULT_DATE)
-CHF.Profits_LossesRange(DEFAULT_STARTDATE, DEFAULT_DATE)  
-USD.Profits_LossesRange(DEFAULT_STARTDATE, DEFAULT_DATE)  
+#EUR.Profits_LossesRange(DEFAULT_STARTDATE, DEFAULT_DATE)
+P_L_CHF = CHF.Profits_LossesRange(DEFAULT_STARTDATE, DEFAULT_DATE)  
+P_L_USD = USD.Profits_LossesRange(DEFAULT_STARTDATE, DEFAULT_DATE)  
